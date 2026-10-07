@@ -44,6 +44,7 @@ const getStageClass = (stage) => {
 };
 
 const formatStageName = (stageInput) => {
+  const trimmedStage = stageInput.trim();
   const map = {
     'applied': 'Applied',
     'oa': 'OA',
@@ -55,7 +56,8 @@ const formatStageName = (stageInput) => {
     'rejected': 'Rejected',
     'ghosted': 'Ghosted'
   };
-  return map[stageInput.toLowerCase()] || stageInput;
+  return map[trimmedStage.toLowerCase()]
+    || `${trimmedStage.charAt(0).toUpperCase()}${trimmedStage.slice(1)}`;
 };
 
 export default function Room() {
@@ -67,6 +69,7 @@ export default function Room() {
 
   const simulationRef = useRef(null);
   const d3NodesRef = useRef([]);
+  const nodePositionsRef = useRef(new Map());
 
   const onNodesChange = useCallback(
     (changes) => setNodes((nds) => applyNodeChanges(changes, nds)),
@@ -84,6 +87,7 @@ export default function Room() {
   }, []);
 
   const onNodeDrag = useCallback((event, node) => {
+    nodePositionsRef.current.set(node.id, node.position);
     if (!simulationRef.current || !node.id.startsWith('stage-')) return;
     const d3Node = d3NodesRef.current.find(n => n.id === node.id);
     if (d3Node) {
@@ -93,6 +97,7 @@ export default function Room() {
   }, []);
 
   const onNodeDragStop = useCallback((event, node) => {
+    nodePositionsRef.current.set(node.id, node.position);
     if (!simulationRef.current || !node.id.startsWith('stage-')) return;
     simulationRef.current.alphaTarget(0);
     const d3Node = d3NodesRef.current.find(n => n.id === node.id);
@@ -139,7 +144,10 @@ export default function Room() {
           type: 'default',
           sourcePosition: Position.Right,
           targetPosition: Position.Left,
-          position: { x: columnFriendsX, y: 100 + (index * 120) },
+          position: nodePositionsRef.current.get(`friend-${name}`) || {
+            x: columnFriendsX,
+            y: 100 + (index * 120)
+          },
           data: { label: name },
           className: circleNodeClass,
           style: { borderRadius: '50%', width: size, height: size }
@@ -153,7 +161,10 @@ export default function Room() {
           type: 'default',
           sourcePosition: Position.Right,
           targetPosition: Position.Left,
-          position: { x: columnCompaniesX, y: 100 + (index * 120) },
+          position: nodePositionsRef.current.get(`company-${name}`) || {
+            x: columnCompaniesX,
+            y: 100 + (index * 120)
+          },
           data: { label: name },
           className: circleNodeClass,
           style: { borderRadius: '50%', width: size, height: size }
@@ -250,8 +261,17 @@ export default function Room() {
           targetPosition: node.targetPosition,
           type: node.type
         }));
-        
-        setNodes([...friendNodes, ...positionedStageNodes, ...companyNodes]);
+
+        const preserveDraggedPositions = (sideNodes) => sideNodes.map((node) => ({
+          ...node,
+          position: nodePositionsRef.current.get(node.id) || node.position
+        }));
+
+        setNodes([
+          ...preserveDraggedPositions(friendNodes),
+          ...positionedStageNodes,
+          ...preserveDraggedPositions(companyNodes)
+        ]);
       });
 
     });
