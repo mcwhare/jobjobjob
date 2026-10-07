@@ -5,7 +5,7 @@ import { MarkerType, Position, applyNodeChanges } from 'reactflow';
 import GraphView from './GraphView';
 
 import { db } from '../firebaseConfig';
-import { collection, doc, onSnapshot, writeBatch } from 'firebase/firestore';
+import { collection, deleteDoc, doc, onSnapshot, writeBatch } from 'firebase/firestore';
 import { forceSimulation, forceY, forceX, forceManyBody, forceCollide } from 'd3-force';
 
 // Define the chronological order to calculate left-to-right gravity
@@ -93,6 +93,21 @@ function RoomContent({ roomId }) {
       alert('Your name could not be saved in this browser. You can still upload your CSV.');
     }
   };
+
+  const handleDeleteFriend = useCallback(async (node) => {
+    const friendName = node.data.label;
+    if (!window.confirm(`Delete ${friendName} and all of their uploaded entries from this room?`)) {
+      return;
+    }
+
+    try {
+      await deleteDoc(doc(db, 'rooms', roomId, 'friends', friendName));
+      nodePositionsRef.current.delete(node.id);
+    } catch (error) {
+      console.error(`Could not delete ${friendName}'s room entries.`, error);
+      alert(`Could not delete ${friendName}'s entries. Please try again.`);
+    }
+  }, [roomId]);
 
   const onNodesChange = useCallback(
     (changes) => setNodes((nds) => applyNodeChanges(changes, nds)),
@@ -390,6 +405,7 @@ function RoomContent({ roomId }) {
           onNodeDragStart={onNodeDragStart}
           onNodeDrag={onNodeDrag}
           onNodeDragStop={onNodeDragStop}
+          onDeleteFriend={handleDeleteFriend}
           isPanEnabled={isPanEnabled}
           onPanEnabledChange={setIsPanEnabled}
         />

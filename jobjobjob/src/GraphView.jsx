@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import ReactFlow, { Background, Controls, useReactFlow, ReactFlowProvider } from 'reactflow';
 import 'reactflow/dist/style.css';
 
@@ -23,9 +23,12 @@ export default function GraphView({
   onNodeDragStart,
   onNodeDrag,
   onNodeDragStop,
+  onDeleteFriend,
   isPanEnabled,
   onPanEnabledChange,
 }) {
+  const [contextMenu, setContextMenu] = useState(null);
+
   return (
     <div className="w-full h-full bg-slate-950">
       <ReactFlowProvider>
@@ -36,6 +39,13 @@ export default function GraphView({
           onNodeDragStart={onNodeDragStart}
           onNodeDrag={onNodeDrag}
           onNodeDragStop={onNodeDragStop}
+          onNodeContextMenu={(event, node) => {
+            event.preventDefault();
+            if (node.id.startsWith('friend-')) {
+              setContextMenu({ x: event.clientX, y: event.clientY, node });
+            }
+          }}
+          onPaneClick={() => setContextMenu(null)}
           fitView
           panOnDrag={isPanEnabled}
           defaultEdgeOptions={{ type: 'default', animated: true }}
@@ -65,6 +75,24 @@ export default function GraphView({
           </Controls>
           <AutoFitView nodes={nodes} />
         </ReactFlow>
+        {contextMenu && (
+          <div
+            className="fixed z-[1000] min-w-44 rounded-md border border-slate-700 bg-slate-800 p-1 shadow-xl"
+            style={{ left: contextMenu.x, top: contextMenu.y }}
+            onContextMenu={(event) => event.preventDefault()}
+          >
+            <button
+              type="button"
+              className="w-full rounded px-3 py-2 text-left text-sm text-red-300 hover:bg-slate-700"
+              onClick={() => {
+                onDeleteFriend(contextMenu.node);
+                setContextMenu(null);
+              }}
+            >
+              Delete {contextMenu.node.data.label} and entries
+            </button>
+          </div>
+        )}
       </ReactFlowProvider>
     </div>
   );
