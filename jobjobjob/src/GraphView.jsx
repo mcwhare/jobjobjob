@@ -1,6 +1,36 @@
 import { useEffect, useState } from 'react';
-import ReactFlow, { Background, Controls, useReactFlow, ReactFlowProvider } from 'reactflow';
+import ReactFlow, { Background, Controls, useReactFlow, ReactFlowProvider, BaseEdge } from 'reactflow';
 import 'reactflow/dist/style.css';
+
+// Custom edge that bows outwards when multiple edges share the same start and end points
+function MultiEdge({ sourceX, sourceY, targetX, targetY, style, markerEnd, data }) {
+  const offsetIndex = data?.offsetIndex || 0;
+  const totalEdges = data?.totalEdges || 1;
+  
+  // Calculate how far to push the curve out from the center line (25px gap between each line)
+  const shift = (offsetIndex - (totalEdges - 1) / 2) * 25; 
+  
+  // Math to find the perpendicular angle to curve the line outward
+  const deltaX = targetX - sourceX;
+  const deltaY = targetY - sourceY;
+  const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+  
+  if (distance === 0) return null;
+
+  const normX = -deltaY / distance;
+  const normY = deltaX / distance;
+
+  const controlPointX = sourceX + deltaX / 2 + normX * shift;
+  const controlPointY = sourceY + deltaY / 2 + normY * shift;
+
+  // Draw a standard SVG Quadratic Bezier curve
+  const path = `M ${sourceX} ${sourceY} Q ${controlPointX} ${controlPointY} ${targetX} ${targetY}`;
+
+  return <BaseEdge path={path} style={style} markerEnd={markerEnd} />;
+}
+
+// Register our new edge with React Flow
+const edgeTypes = { multi: MultiEdge };
 
 function AutoFitView({ nodes }) {
   const { fitView } = useReactFlow();
@@ -35,6 +65,7 @@ export default function GraphView({
         <ReactFlow 
           nodes={nodes} 
           edges={edges} 
+          edgeTypes={edgeTypes} // Hooked up the custom multi-edge renderer
           onNodesChange={onNodesChange} 
           onNodeDragStart={onNodeDragStart}
           onNodeDrag={onNodeDrag}
@@ -50,7 +81,7 @@ export default function GraphView({
           minZoom={0.1}
           maxZoom={4}
           panOnDrag={isPanEnabled}
-          defaultEdgeOptions={{ type: 'default', animated: true }}
+          defaultEdgeOptions={{ type: 'multi', animated: true }} // Set all edges to use the multi curve
           proOptions={{ hideAttribution: true }}
         >
           <Background color="#334155" gap={20} size={1} />

@@ -110,3 +110,29 @@ code {
   padding: 4px 8px;
   background: var(--code-bg);
 }
+
+/* Firefox scrollbar */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #334155 transparent;
+}
+
+/* Chrome, Edge, and Safari scrollbar */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #334155; /* slate-700 */
+  border-radius: 8px;
+  border: 2px solid #0f172a; /* matches modal background for a padded look */
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: #475569; /* slate-600 */
+}
