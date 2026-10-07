@@ -10,6 +10,14 @@ import { forceSimulation, forceY, forceX, forceManyBody, forceCollide } from 'd3
 
 // Define the chronological order to calculate left-to-right gravity
 const STAGE_ORDER = ['Applied', 'OA', 'Interview 1', 'Interview 2', 'Offer', 'Rejected', 'Ghosted'];
+const ENDPOINT_GRID_SPACING = 220;
+const OUTCOME_COLORS = {
+  rejected: '#ef4444',
+  ghosted: '#374151',
+  accepted: '#3b82f6',
+  offered: '#22c55e',
+  default: '#cbd5e1'
+};
 
 const circleNodeClass = "bg-slate-900 text-white border-2 border-slate-600 rounded-full flex justify-center items-center text-xs font-bold shadow-lg";
 
@@ -19,45 +27,79 @@ const getNodeSize = (label) => {
   return estimatedWidth;
 };
 
-const STAGE_COLORS = {
-  'Applied': '#94a3b8',
-  'OA': '#60a5fa',
-  'Interview 1': '#a855f7',
-  'Interview 2': '#a855f7',
-  'Offer': '#22c55e',
-  'Rejected': '#ef4444',
-  'Ghosted': '#78716c'
+const getStageCategory = (stage) => {
+  const normalizedStage = stage.toLowerCase().replace(/[^a-z]/g, '');
+  if (normalizedStage.startsWith('reject')) return 'rejected';
+  if (normalizedStage.startsWith('ghost')) return 'ghosted';
+  if (normalizedStage.startsWith('accept')) return 'accepted';
+  if (normalizedStage.startsWith('offer')) return 'offered';
+  if (normalizedStage.startsWith('apply')) return 'applied';
+  if (normalizedStage.startsWith('oa')) return 'assessment';
+  if (normalizedStage.startsWith('interview')) return 'interview';
+  return 'other';
 };
 
+const getStageProgress = (stage) => {
+  const category = getStageCategory(stage);
+  if (category === 'applied') return 0;
+  if (category === 'assessment') return 1;
+  if (category === 'interview') {
+    const interviewNumber = Number(stage.match(/\d+/)?.[0]);
+    return interviewNumber ? 1 + interviewNumber : 2;
+  }
+  if (category === 'offered') return 4;
+  if (category === 'accepted') return 5;
+  if (category === 'rejected') return 6;
+  if (category === 'ghosted') return 7;
+  const knownStageIndex = STAGE_ORDER.indexOf(stage);
+  return knownStageIndex === -1 ? 3 : knownStageIndex;
+};
+
+const getFurthestStage = (stages) => stages.reduce((furthest, stage) => (
+  !furthest || getStageProgress(stage) > getStageProgress(furthest) ? stage : furthest
+), '');
+
+const getOutcomeColor = (stage) => OUTCOME_COLORS[getStageCategory(stage)] || OUTCOME_COLORS.default;
+
 const getStageClass = (stage) => {
-  const classes = {
-    'Applied': "bg-slate-800 text-slate-300 border-2 border-slate-600",
-    'OA': "bg-blue-900 text-blue-200 border-2 border-blue-700",
-    'Interview 1': "bg-purple-900 text-purple-200 border-2 border-purple-700",
-    'Interview 2': "bg-purple-900 text-purple-200 border-2 border-purple-700",
-    'Offer': "bg-green-900 text-green-200 border-2 border-green-700",
-    'Rejected': "bg-red-900 text-red-200 border-2 border-red-700",
-    'Ghosted': "bg-stone-800 text-stone-400 border-2 border-stone-600 border-dashed"
+  const classesByCategory = {
+    rejected: "bg-red-900 text-red-200 border-2 border-red-700",
+    ghosted: "bg-stone-800 text-stone-300 border-2 border-stone-600 border-dashed",
+    accepted: "bg-blue-900 text-blue-200 border-2 border-blue-700",
+    offered: "bg-green-900 text-green-200 border-2 border-green-700",
+    applied: "bg-slate-800 text-slate-300 border-2 border-slate-600",
+    assessment: "bg-slate-800 text-slate-300 border-2 border-slate-600",
+    interview: "bg-slate-800 text-slate-300 border-2 border-slate-600",
+    other: "bg-slate-800 text-slate-300 border-2 border-slate-600"
   };
   const baseClass = " rounded-full flex justify-center items-center text-[10px] font-bold shadow-lg text-center p-2";
-  return (classes[stage] || "bg-slate-800 text-slate-300 border-2 border-slate-600") + baseClass;
+  return classesByCategory[getStageCategory(stage)] + baseClass;
 };
 
 const formatStageName = (stageInput) => {
   const trimmedStage = stageInput.trim();
-  const map = {
-    'applied': 'Applied',
-    'oa': 'OA',
-    'interview 1': 'Interview 1',
-    'interview 2': 'Interview 2',
-    'interview': 'Interview 1',
-    'offer': 'Offer',
-    'offered': 'Offer',
-    'rejected': 'Rejected',
-    'ghosted': 'Ghosted'
+  const category = getStageCategory(trimmedStage);
+  const canonicalNames = {
+    applied: 'Applied',
+    offered: 'Offer',
+    accepted: 'Accepted',
+    rejected: 'Rejected',
+    ghosted: 'Ghosted'
   };
-  return map[trimmedStage.toLowerCase()]
-    || `${trimmedStage.charAt(0).toUpperCase()}${trimmedStage.slice(1)}`;
+  if (canonicalNames[category]) return canonicalNames[category];
+  if (category === 'assessment') return 'OA';
+  if (category === 'interview') {
+    const interviewNumber = Number(trimmedStage.match(/\d+/)?.[0]) || 1;
+    return `Interview ${interviewNumber}`;
+  }
+  return `${trimmedStage.charAt(0).toUpperCase()}${trimmedStage.slice(1)}`;
+};
+
+const normalizeCsvHeader = (header) => header.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+
+const findCsvHeader = (headers, aliases) => {
+  const normalizedAliases = new Set(aliases);
+  return headers.find((header) => normalizedAliases.has(normalizeCsvHeader(header)));
 };
 
 export default function Room() {
@@ -168,23 +210,105 @@ function RoomContent({ roomId }) {
         return row.Stages.split(',').map(s => formatStageName(s.trim()));
       });
       const uniqueStages = [...new Set(allStagesRaw)].filter(Boolean);
+      const orderedStages = [...uniqueStages].sort((a, b) => {
+        return getStageProgress(a) - getStageProgress(b)
+          || a.localeCompare(b);
+      });
+      const companyFurthestStages = new Map();
+      const friendFurthestStages = new Map();
+
+      allData.forEach((row) => {
+        if (!row.Stages) return;
+
+        const completedStages = row.Stages
+          .split(',')
+          .map(s => formatStageName(s.trim()));
+        const furthestStage = getFurthestStage(completedStages);
+
+        if (row.Company) {
+          const previousCompanyStage = companyFurthestStages.get(row.Company);
+          if (!previousCompanyStage
+            || getStageProgress(furthestStage) > getStageProgress(previousCompanyStage)) {
+            companyFurthestStages.set(row.Company, furthestStage);
+          }
+        }
+        if (row.Friend) {
+          const previousFriendStage = friendFurthestStages.get(row.Friend);
+          if (!previousFriendStage
+            || getStageProgress(furthestStage) > getStageProgress(previousFriendStage)) {
+            friendFurthestStages.set(row.Friend, furthestStage);
+          }
+        }
+      });
+
+      const companiesByFurthestStage = new Map();
+      uniqueCompanies.forEach((company) => {
+        const stage = companyFurthestStages.get(company) || 'Unknown';
+        const companies = companiesByFurthestStage.get(stage) || [];
+        companies.push(company);
+        companiesByFurthestStage.set(stage, companies);
+      });
+      const companyGroups = [...companiesByFurthestStage.entries()]
+        .sort(([stageA], [stageB]) => {
+          return getStageProgress(stageA) - getStageProgress(stageB);
+        });
 
       // Dynamically calculate graph width based on the number of active middle stages
       const centerX = 600; 
-      const dynamicSpread = 350 + (uniqueStages.length * 40); // Widens as more stages appear
+      const stageSpacing = 190;
+      const dynamicSpread = 350 + ((Math.max(1, orderedStages.length) - 1) * stageSpacing) / 2;
       const columnFriendsX = centerX - dynamicSpread;
       const columnCompaniesX = centerX + dynamicSpread;
+      const friendColumns = Math.max(1, Math.ceil(Math.sqrt(uniqueFriends.length)));
+      const friendRows = Math.ceil(uniqueFriends.length / friendColumns);
+      const friendLayoutBottom = 100 + Math.max(0, friendRows - 1) * ENDPOINT_GRID_SPACING;
+      let companyLayoutBottom = 100;
+      let hasCompanyLayoutRows = false;
+      const groupedCompanyNodes = companyGroups.flatMap(([stage, companies]) => {
+        const columns = Math.max(1, Math.ceil(Math.sqrt(companies.length / 2)));
+        const rows = Math.ceil(companies.length / columns);
+        const groupStartY = hasCompanyLayoutRows ? companyLayoutBottom + 100 : 100;
+        const groupNodes = companies.map((name, index) => {
+          const size = getNodeSize(name);
+          const row = Math.floor(index / columns);
+          const column = index % columns;
+          return {
+            id: `company-${name}`,
+            type: 'default',
+            sourcePosition: Position.Right,
+            targetPosition: Position.Left,
+            position: nodePositionsRef.current.get(`company-${name}`) || {
+              x: columnCompaniesX + column * ENDPOINT_GRID_SPACING,
+              y: groupStartY + row * ENDPOINT_GRID_SPACING
+            },
+            data: { label: name },
+            className: circleNodeClass,
+            style: {
+              borderRadius: '50%',
+              width: size,
+              height: size,
+              borderColor: getOutcomeColor(stage)
+            }
+          };
+        });
+        companyLayoutBottom = groupStartY + (rows - 1) * ENDPOINT_GRID_SPACING;
+        hasCompanyLayoutRows = true;
+        return groupNodes;
+      });
+      const centerY = (100 + Math.max(friendLayoutBottom, companyLayoutBottom)) / 2;
 
       const friendNodes = uniqueFriends.map((name, index) => {
         const size = getNodeSize(name);
+        const row = Math.floor(index / friendColumns);
+        const column = index % friendColumns;
         return {
           id: `friend-${name}`,
           type: 'default',
           sourcePosition: Position.Right,
           targetPosition: Position.Left,
           position: nodePositionsRef.current.get(`friend-${name}`) || {
-            x: columnFriendsX,
-            y: 100 + (index * 120)
+            x: columnFriendsX - column * ENDPOINT_GRID_SPACING,
+            y: 100 + row * ENDPOINT_GRID_SPACING
           },
           data: { label: name },
           className: circleNodeClass,
@@ -192,36 +316,10 @@ function RoomContent({ roomId }) {
         };
       });
 
-      const companyNodes = uniqueCompanies.map((name, index) => {
-        const size = getNodeSize(name);
-        return {
-          id: `company-${name}`,
-          type: 'default',
-          sourcePosition: Position.Right,
-          targetPosition: Position.Left,
-          position: nodePositionsRef.current.get(`company-${name}`) || {
-            x: columnCompaniesX,
-            y: 100 + (index * 120)
-          },
-          data: { label: name },
-          className: circleNodeClass,
-          style: { borderRadius: '50%', width: size, height: size }
-        };
-      });
-
-      const maxNodesCount = Math.max(friendNodes.length, companyNodes.length);
-      const centerY = (100 + (maxNodesCount * 120)) / 2;
-
-      const stageNodes = uniqueStages.map((stage) => {
+      const stageNodes = orderedStages.map((stage, index) => {
         const existingNode = d3NodesRef.current.find(n => n.id === `stage-${stage}`);
         const size = getNodeSize(stage);
-        
-        // Calculate a horizontal gravity target based on the stage's chronological order
-        const stageIndex = STAGE_ORDER.indexOf(stage);
-        const horizontalOffset = stageIndex !== -1 
-          ? (stageIndex - (STAGE_ORDER.length / 2)) * 80 
-          : 0;
-        const targetX = centerX + horizontalOffset;
+        const targetX = centerX + (index - (orderedStages.length - 1) / 2) * stageSpacing;
 
         return {
           id: `stage-${stage}`,
@@ -248,29 +346,33 @@ function RoomContent({ roomId }) {
         const completedStages = row.Stages.split(',').map(s => formatStageName(s.trim()));
         if (completedStages.length === 0) return;
 
-        const finalStage = completedStages[completedStages.length - 1];
-        const edgeColor = STAGE_COLORS[finalStage] || '#94a3b8'; 
+        const furthestStage = getFurthestStage(completedStages);
+        const edgeColor = getOutcomeColor(furthestStage);
+        const friendEdgeColor = getOutcomeColor(friendFurthestStages.get(row.Friend) || furthestStage);
 
         newEdges.push({
           id: `e-${row.Friend}-${completedStages[0]}-${index}-start`,
           source: `friend-${row.Friend}`,
           target: `stage-${completedStages[0]}`,
-          style: { stroke: edgeColor, strokeWidth: 2 }
+          markerEnd: { type: MarkerType.ArrowClosed, color: friendEdgeColor },
+          style: { stroke: friendEdgeColor, strokeWidth: 2 }
         });
 
         for (let i = 0; i < completedStages.length - 1; i++) {
+          const sourceStageColor = getOutcomeColor(completedStages[i]);
           newEdges.push({
             id: `e-${completedStages[i]}-${completedStages[i+1]}-${index}-mid`,
             source: `stage-${completedStages[i]}`,
             target: `stage-${completedStages[i+1]}`,
-            style: { stroke: edgeColor, strokeWidth: 2 },
+            markerEnd: { type: MarkerType.ArrowClosed, color: sourceStageColor },
+            style: { stroke: sourceStageColor, strokeWidth: 2 },
             animated: true 
           });
         }
 
         newEdges.push({
-          id: `e-${finalStage}-${row.Company}-${index}-end`,
-          source: `stage-${finalStage}`,
+          id: `e-${furthestStage}-${row.Company}-${index}-end`,
+          source: `stage-${furthestStage}`,
           target: `company-${row.Company}`,
           markerEnd: { type: MarkerType.ArrowClosed, color: edgeColor },
           style: { stroke: edgeColor, strokeWidth: 2 }
@@ -284,7 +386,7 @@ function RoomContent({ roomId }) {
       simulationRef.current = forceSimulation(d3NodesRef.current)
         .force('collide', forceCollide(110).strength(1.2)) 
         // Pull each node toward its specific chronological X target
-        .force('x', forceX(d => d.targetX).strength(0.06)) 
+        .force('x', forceX(d => d.targetX).strength(0.18)) 
         .force('y', forceY(centerY).strength(0.04))       
         .force('charge', forceManyBody().strength(-500)); 
 
@@ -308,7 +410,7 @@ function RoomContent({ roomId }) {
         setNodes([
           ...preserveDraggedPositions(friendNodes),
           ...positionedStageNodes,
-          ...preserveDraggedPositions(companyNodes)
+          ...preserveDraggedPositions(groupedCompanyNodes)
         ]);
       });
 
@@ -331,19 +433,62 @@ function RoomContent({ roomId }) {
       header: true,
       skipEmptyLines: true,
       complete: async (results) => {
+        const headers = results.meta.fields || [];
+        const companyHeader = findCsvHeader(headers, [
+          'company',
+          'companies',
+          'companyname',
+          'companynames',
+          'employer',
+          'employers',
+          'organization',
+          'organizations',
+          'organisation',
+          'organisations',
+          'job',
+          'jobs',
+          'jobcompany'
+        ]);
+        const stagesHeader = findCsvHeader(headers, [
+          'stage',
+          'stages',
+          'process',
+          'processes',
+          'result',
+          'results',
+          'status',
+          'statuses',
+          'applicationstage',
+          'applicationstages',
+          'hiringstage',
+          'hiringstages',
+          'hiringprocess',
+          'interviewprocess'
+        ]);
+
+        if (!companyHeader || !stagesHeader) {
+          const missingHeaders = [
+            !companyHeader && 'company/jobs',
+            !stagesHeader && 'stage/process'
+          ].filter(Boolean);
+          alert(`Could not identify the ${missingHeaders.join(' and ')} column${missingHeaders.length > 1 ? 's' : ''}. Please check your CSV headings.`);
+          event.target.value = null;
+          return;
+        }
+
         const data = results.data;
         
         const formattedApplications = data.map(row => {
-          const stagesRaw = row.Stages || row.Results; 
+          const stagesRaw = row[stagesHeader]?.trim();
           return {
             Friend: uploaderName.trim(),
-            Company: row.Company?.trim(),
-            Stages: stagesRaw?.trim()
+            Company: row[companyHeader]?.trim(),
+            Stages: stagesRaw
           };
         }).filter(row => row.Company && row.Stages);
 
         if (formattedApplications.length === 0) {
-          alert("Could not find any valid rows. Please ensure your CSV has 'Company' and 'Stages' (or 'Results') columns.");
+          alert("Could not find any valid rows. Ensure the company/jobs column and stage/process column contain values.");
           event.target.value = null;
           return;
         }

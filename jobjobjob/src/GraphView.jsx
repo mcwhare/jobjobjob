@@ -7,7 +7,7 @@ function AutoFitView({ nodes }) {
 
   useEffect(() => {
     const timeoutId = setTimeout(() => {
-      fitView({ duration: 800, padding: 0.1 });
+      fitView({ duration: 800, padding: 0.15 });
     }, 50);
     
     return () => clearTimeout(timeoutId);
@@ -47,6 +47,8 @@ export default function GraphView({
           }}
           onPaneClick={() => setContextMenu(null)}
           fitView
+          minZoom={0.1}
+          maxZoom={4}
           panOnDrag={isPanEnabled}
           defaultEdgeOptions={{ type: 'default', animated: true }}
           proOptions={{ hideAttribution: true }}
