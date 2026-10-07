@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import Papa from 'papaparse';
 import { MarkerType, Position, applyNodeChanges } from 'reactflow';
 import GraphView from './GraphView';
@@ -62,14 +62,37 @@ const formatStageName = (stageInput) => {
 
 export default function Room() {
   const { roomId } = useParams();
+  return <RoomContent key={roomId} roomId={roomId} />;
+}
+
+function RoomContent({ roomId }) {
+  const navigate = useNavigate();
   const [nodes, setNodes] = useState([]);
   const [edges, setEdges] = useState([]);
-  const [uploaderName, setUploaderName] = useState('');
+  const [uploaderName, setUploaderName] = useState(() => {
+    try {
+      return window.localStorage.getItem(`jobjobjob:uploader-name:${roomId}`) || '';
+    } catch (error) {
+      console.error('Could not restore the saved uploader name.', error);
+      return '';
+    }
+  });
   const [isPanEnabled, setIsPanEnabled] = useState(true);
 
   const simulationRef = useRef(null);
   const d3NodesRef = useRef([]);
   const nodePositionsRef = useRef(new Map());
+
+  const handleUploaderNameChange = (event) => {
+    const name = event.target.value;
+    setUploaderName(name);
+    try {
+      window.localStorage.setItem(`jobjobjob:uploader-name:${roomId}`, name);
+    } catch (error) {
+      console.error('Could not save the uploader name.', error);
+      alert('Your name could not be saved in this browser. You can still upload your CSV.');
+    }
+  };
 
   const onNodesChange = useCallback(
     (changes) => setNodes((nds) => applyNodeChanges(changes, nds)),
@@ -316,7 +339,6 @@ export default function Room() {
         
         await batch.commit();
         event.target.value = null;
-        setUploaderName('');
       }
     });
   };
@@ -325,12 +347,21 @@ export default function Room() {
     <div className="flex flex-col h-screen bg-slate-950 font-sans">
       <div className="p-4 bg-slate-900 border-b border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-4 z-10 shadow-md">
         <div className="flex flex-col sm:flex-row items-center gap-3">
+          <button
+            type="button"
+            onClick={() => navigate('/')}
+            aria-label="Return to home page"
+            title="Home"
+            className="flex items-center justify-center rounded-md p-1 hover:bg-slate-800 transition-colors"
+          >
+            <img src="/jjj logo trans.svg" alt="" className="w-12 h-12 object-contain" />
+          </button>
           <div>
-            <span className="text-slate-400 mr-2 text-sm">Room ID:</span>
+            <span className="text-slate-400 mr-2 text-sm">Room code:</span>
             <strong className="tracking-widest text-white">{roomId}</strong>
           </div>
           <div className="text-slate-600 hidden sm:block">|</div>
-          <div className="text-sm text-slate-400">Share this URL with friends to collaborate</div>
+          <div className="text-sm text-slate-400">Share code to collaborate</div>
         </div>
 
         <div className="flex items-center gap-3">
@@ -338,7 +369,7 @@ export default function Room() {
             type="text" 
             placeholder="Enter your name..."
             value={uploaderName}
-            onChange={(e) => setUploaderName(e.target.value)}
+            onChange={handleUploaderNameChange}
             className="px-3 py-2 bg-slate-800 text-white border border-slate-700 rounded-md text-sm focus:outline-none focus:border-emerald-500 w-40"
           />
           <label className="cursor-pointer px-4 py-2 text-sm font-bold rounded-md bg-emerald-600 text-white hover:bg-emerald-500 transition-colors shadow-md flex items-center gap-2">
