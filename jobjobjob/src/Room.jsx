@@ -8,6 +8,9 @@ import { db } from '../firebaseConfig';
 import { collection, deleteDoc, doc, onSnapshot, writeBatch } from 'firebase/firestore';
 import { forceSimulation, forceY, forceX, forceManyBody, forceCollide } from 'd3-force';
 import { GRAPH_SETTINGS } from '../graphSettings';
+import logoImage from './assets/jjj logo trans.svg';
+import tutorialOne from './assets/tutorial1.png';
+import tutorialTwo from './assets/tutorial2.png';
 
 const STAGE_ORDER = ['Applied', 'OA', 'Screening', 'Interview 1', 'Interview 2', 'Offer', 'Rejected', 'Ghosted'];
 
@@ -587,7 +590,7 @@ function RoomContent({ roomId }) {
             title="Home"
             className="flex items-center justify-center rounded-md p-1 hover:bg-slate-800 transition-colors"
           >
-            <img src="/jjj logo trans.svg" alt="" className="w-12 h-12 object-contain" />
+            <img src={logoImage} alt="" className="w-12 h-12 object-contain" />
           </button>
           <div className="flex items-center gap-2">
             <span className="text-slate-400 text-sm">Room code:</span>
@@ -695,7 +698,7 @@ function RoomContent({ roomId }) {
                    Your spreadsheet must include two headers: <strong>Company</strong> and <strong>Results</strong>. 
                  </p>
                  <div className="bg-slate-800 h-40 rounded-lg flex items-center justify-center border border-slate-700 overflow-hidden">
-                    <img src="/tutorial1.png" alt="Column setup" className="w-full h-full object-cover" />
+                    <img src={tutorialOne} alt="Column setup" className="w-full h-full object-cover" />
                  </div>
                </div>
 
@@ -706,7 +709,7 @@ function RoomContent({ roomId }) {
                    You can add more stages, but the graph may look disorganised.
                  </p>
                  <div className="bg-slate-800 h-40 rounded-lg flex items-center justify-center border border-slate-700 overflow-hidden">
-                    <img src="/tutorial2.png" alt="Column setup" className="w-full h-full object-cover" />
+                    <img src={tutorialTwo} alt="Column setup" className="w-full h-full object-cover" />
                  </div>
                </div>
 
