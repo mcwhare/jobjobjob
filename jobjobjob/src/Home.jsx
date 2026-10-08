@@ -1,18 +1,83 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { db } from '../firebaseConfig'; 
+import { doc, getDoc, setDoc, collection, getDocs, query, limit } from 'firebase/firestore';
 
 export default function Home() {
   const navigate = useNavigate();
   const [roomId, setRoomId] = useState('');
   const [isPrivacyModalOpen, setIsPrivacyModalOpen] = useState(false);
+  const [error, setError] = useState('');
+  const [isChecking, setIsChecking] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
 
-  const handleCreateRoom = () => navigate(`/room/${Math.random().toString(36).substring(2, 9)}`);
+  const handleCreateRoom = async () => {
+    setIsCreating(true);
+    setError('');
+    
+    try {
+      let isUnique = false;
+      let newRoomId = '';
 
-  const handleJoinRoom = (event) => {
+      // Keep generating and checking until we find an unused ID
+      while (!isUnique) {
+        newRoomId = Math.random().toString(36).substring(2, 9);
+        const roomSnap = await getDoc(doc(db, 'rooms', newRoomId));
+        
+        if (!roomSnap.exists()) {
+          // Double-check legacy fallback just to be 100% safe
+          const friendsSnap = await getDocs(query(collection(db, 'rooms', newRoomId, 'friends'), limit(1)));
+          if (friendsSnap.empty) {
+            isUnique = true;
+          }
+        }
+      }
+
+      await setDoc(doc(db, 'rooms', newRoomId), {
+        createdAt: new Date().toISOString()
+      });
+      
+      navigate(`/room/${newRoomId}`);
+    } catch (err) {
+      console.error("Error creating room:", err);
+      setError("Could not create room. Please try again.");
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  const handleJoinRoom = async (event) => {
     event.preventDefault();
     const trimmedRoomId = roomId.trim();
-    if (trimmedRoomId) {
-      navigate(`/room/${encodeURIComponent(trimmedRoomId)}`);
+    if (!trimmedRoomId) return;
+
+    setIsChecking(true);
+    setError('');
+
+    try {
+      // 1. Check if the parent room document exists (for newly created rooms)
+      const roomSnap = await getDoc(doc(db, 'rooms', trimmedRoomId));
+      
+      if (roomSnap.exists()) {
+        navigate(`/room/${encodeURIComponent(trimmedRoomId)}`);
+        return;
+      }
+
+      // 2. Fallback for older rooms: check if the 'friends' subcollection has data
+      const friendsSnap = await getDocs(query(collection(db, 'rooms', trimmedRoomId, 'friends'), limit(1)));
+      
+      if (!friendsSnap.empty) {
+        navigate(`/room/${encodeURIComponent(trimmedRoomId)}`);
+        return;
+      }
+
+      // If neither exists, block them and show an error
+      setError('Room not found. Please check the code and try again.');
+    } catch (err) {
+      console.error("Error joining room:", err);
+      setError('An error occurred checking the room.');
+    } finally {
+      setIsChecking(false);
     }
   };
 
@@ -56,22 +121,26 @@ export default function Home() {
           >
             See Example
           </button>
-          <button
+          <button 
             onClick={handleCreateRoom}
-            className="px-6 sm:px-8 py-3 text-sm font-bold rounded-lg bg-[#0070f3] text-white hover:bg-blue-600 transition-colors shadow-lg shadow-blue-500/20 w-full sm:w-auto text-center"
+            disabled={isCreating}
+            className={`px-6 sm:px-8 py-3 text-sm font-bold rounded-lg text-white transition-colors shadow-lg shadow-blue-500/20 w-full sm:w-auto text-center ${isCreating ? 'bg-blue-800 cursor-not-allowed' : 'bg-[#0070f3] hover:bg-blue-600'}`}
           >
-            Create New Room
+            {isCreating ? 'Creating...' : 'Create New Room'}
           </button>
         </div>
 
         {/* Join Room Section */}
         <div className="flex flex-col items-center w-full max-w-[26rem]">
           <p className="text-[10px] sm:text-xs text-slate-300 mb-2 sm:mb-3 font-mono">Already have a code?</p>
-          <form onSubmit={handleJoinRoom} className="flex flex-col sm:flex-row gap-3 w-full">
+          <form onSubmit={handleJoinRoom} className="flex flex-col sm:flex-row gap-3 w-full relative">
             <input
               type="text"
               value={roomId}
-              onChange={(event) => setRoomId(event.target.value)}
+              onChange={(event) => {
+                setRoomId(event.target.value);
+                setError(''); // Clear error when typing
+              }}
               placeholder="Enter Room Code:"
               aria-label="Room ID"
               required
@@ -79,11 +148,19 @@ export default function Home() {
             />
             <button
               type="submit"
-              className="px-6 sm:px-8 py-3 text-sm font-bold rounded-lg bg-[#334155] text-white hover:bg-slate-600 transition-colors shadow-md w-full sm:w-auto whitespace-nowrap"
+              disabled={isChecking}
+              className={`px-6 sm:px-8 py-3 text-sm font-bold rounded-lg text-white transition-colors shadow-md w-full sm:w-auto whitespace-nowrap ${isChecking ? 'bg-slate-600 cursor-not-allowed' : 'bg-[#334155] hover:bg-slate-500'}`}
             >
-              Join Room
+              {isChecking ? 'Checking...' : 'Join Room'}
             </button>
           </form>
+          
+          {/* Error Message Display */}
+          {error && (
+            <p className="text-red-400 text-xs mt-3 font-mono animate-pulse text-center">
+              {error}
+            </p>
+          )}
         </div>
       </div>
 

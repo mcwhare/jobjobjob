@@ -125,6 +125,14 @@ function RoomContent({ roomId }) {
   const [isPanEnabled, setIsPanEnabled] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
+  const [hasCopied, setHasCopied] = useState(false);
+
+  const handleCopyRoomId = () => {
+    navigator.clipboard.writeText(roomId);
+    setHasCopied(true);
+    setTimeout(() => setHasCopied(false), 2000);
+  };
+
   const simulationRef = useRef(null);
   const d3NodesRef = useRef([]);
   const nodePositionsRef = useRef(new Map());
@@ -576,9 +584,24 @@ function RoomContent({ roomId }) {
           >
             <img src="/jjj logo trans.svg" alt="" className="w-12 h-12 object-contain" />
           </button>
-          <div>
-            <span className="text-slate-400 mr-2 text-sm">Room code:</span>
-            <strong className="tracking-widest text-white">{roomId}</strong>
+          <div className="flex items-center gap-2">
+            <span className="text-slate-400 text-sm">Room code:</span>
+            <button
+              onClick={handleCopyRoomId}
+              className="group flex items-center gap-2 px-2 py-1 -ml-2 rounded-md hover:bg-slate-800 transition-colors cursor-pointer"
+              title="Copy room code"
+            >
+              <strong className="tracking-widest text-white group-hover:text-blue-400 transition-colors">{roomId}</strong>
+              {hasCopied ? (
+                <svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4 text-slate-500 group-hover:text-blue-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+              )}
+            </button>
           </div>
           <div className="text-slate-600 hidden sm:block">|</div>
           <div className="text-sm text-slate-400">Share code to collaborate</div>
