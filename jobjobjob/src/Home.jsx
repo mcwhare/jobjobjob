@@ -4,7 +4,10 @@ import { useNavigate } from 'react-router-dom';
 export default function Home() {
   const navigate = useNavigate();
   const [roomId, setRoomId] = useState('');
+  const [isPrivacyModalOpen, setIsPrivacyModalOpen] = useState(false);
+
   const handleCreateRoom = () => navigate(`/room/${Math.random().toString(36).substring(2, 9)}`);
+
   const handleJoinRoom = (event) => {
     event.preventDefault();
     const trimmedRoomId = roomId.trim();
@@ -13,36 +16,116 @@ export default function Home() {
     }
   };
 
+  const handleSeeExample = () => {
+    navigate('/room/example');
+  };
+
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-slate-950 text-white font-sans p-4">
-      <h1 className="text-3xl md:text-4xl font-bold mb-3 text-center">Job Job Job</h1>
-      <h2 className="text-xl md:text-2xl font-semibold mb-4 text-center">Visualise your friend group's job hunt.</h2>
-      <p className="text-slate-400 mb-8 text-center max-w-md">Merge and visualize your friend group's hiring pipelines.</p>
-      <div className="flex flex-col sm:flex-row items-stretch gap-3">
-        <button 
-          onClick={handleCreateRoom}
-          className="px-6 py-3 text-base font-bold rounded-lg bg-blue-600 text-white hover:bg-blue-500 transition-colors shadow-lg shadow-blue-500/20 cursor-pointer"
-        >
-          Start New Graph
-        </button>
-        <form onSubmit={handleJoinRoom} className="flex gap-2">
-          <input
-            type="text"
-            value={roomId}
-            onChange={(event) => setRoomId(event.target.value)}
-            placeholder="Enter room ID"
-            aria-label="Room ID"
-            required
-            className="min-w-0 w-40 px-3 py-2 rounded-lg bg-slate-800 text-white border border-slate-700 focus:outline-none focus:border-blue-500"
-          />
+    // min-h-[100dvh] handles mobile browser toolbars better than min-h-screen
+    <div
+      className="flex flex-col items-center justify-center min-h-[100dvh] bg-[#060a14] font-sans p-4 sm:p-6 relative bg-cover bg-center overflow-x-hidden"
+      style={{ backgroundImage: "url('/background.png')" }}
+    >
+      {/* Main Card Container */}
+      <div className="bg-[#0a0f1c]/90 backdrop-blur-md border border-slate-800 rounded-3xl p-6 sm:p-10 md:p-14 w-full max-w-[48rem] flex flex-col items-center shadow-2xl z-10 my-auto">
+
+        {/* Logo - scales from 5rem tall on mobile to 10rem on large desktops */}
+        <img
+          src="/jjj logo trans.svg"
+          alt="JOB JOB JOB"
+          className="h-20 sm:h-28 md:h-36 lg:h-40 mb-6 md:mb-8 object-contain"
+        />
+
+        {/* Tagline */}
+        <h2 className="text-xl sm:text-2xl md:text-[1.7rem] font-bold mb-4 text-white text-center tracking-wide leading-tight">
+          Visualise your friend group's job hunt.
+        </h2>
+
+        {/* Subtext - flows naturally on smaller screens */}
+        <p className="text-slate-400 text-[11px] sm:text-xs text-center max-w-2xl mb-8 md:mb-12 leading-relaxed font-mono">
+          Track applications, interviews, and offers together.<br></br> Create a room, invite your friends,
+          follow everyone's progress.
+        </p>
+        <br></br><br></br>
+
+        {/* Top Buttons Row - stacks on mobile, side-by-side on larger screens */}
+        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mb-8 md:mb-12 w-full sm:w-auto">
           <button
-            type="submit"
-            className="px-6 py-3 text-base font-bold rounded-lg bg-slate-700 text-white hover:bg-slate-600 transition-colors cursor-pointer"
+            onClick={handleSeeExample}
+            className="px-6 sm:px-8 py-3 text-sm font-bold rounded-lg bg-[#cbd5e1] text-slate-900 hover:bg-slate-300 transition-colors shadow-md w-full sm:w-auto text-center"
           >
-            Join Room
+            See Example
           </button>
-        </form>
+          <button
+            onClick={handleCreateRoom}
+            className="px-6 sm:px-8 py-3 text-sm font-bold rounded-lg bg-[#0070f3] text-white hover:bg-blue-600 transition-colors shadow-lg shadow-blue-500/20 w-full sm:w-auto text-center"
+          >
+            Create New Room
+          </button>
+        </div>
+
+        {/* Join Room Section */}
+        <div className="flex flex-col items-center w-full max-w-[26rem]">
+          <p className="text-[10px] sm:text-xs text-slate-300 mb-2 sm:mb-3 font-mono">Already have a code?</p>
+          <form onSubmit={handleJoinRoom} className="flex flex-col sm:flex-row gap-3 w-full">
+            <input
+              type="text"
+              value={roomId}
+              onChange={(event) => setRoomId(event.target.value)}
+              placeholder="Enter Room Code:"
+              aria-label="Room ID"
+              required
+              className="flex-1 min-w-0 px-4 py-3 rounded-lg bg-slate-800/80 text-white border border-slate-700 focus:outline-none focus:border-blue-500 text-sm placeholder:text-slate-500 font-mono"
+            />
+            <button
+              type="submit"
+              className="px-6 sm:px-8 py-3 text-sm font-bold rounded-lg bg-[#334155] text-white hover:bg-slate-600 transition-colors shadow-md w-full sm:w-auto whitespace-nowrap"
+            >
+              Join Room
+            </button>
+          </form>
+        </div>
       </div>
+
+      {/* Footer */}
+      <div className="mt-6 flex flex-col items-center gap-2 text-[10px] text-slate-400 z-10 font-mono pb-2">
+        <span>@mcwh 2026</span>
+        <button
+          onClick={() => setIsPrivacyModalOpen(true)}
+          className="hover:text-white transition-colors"
+        >
+          Privacy Policy
+        </button>
+      </div>
+
+      {/* Privacy Policy Modal */}
+      {isPrivacyModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm transition-opacity">
+          <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col relative overflow-hidden">
+
+            {/* Modal Header */}
+            <div className="flex justify-between items-center p-4 sm:p-5 border-b border-slate-800 bg-slate-900/50">
+              <h2 className="text-lg sm:text-xl font-bold text-white">Privacy Policy</h2>
+              <button
+                onClick={() => setIsPrivacyModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-md hover:bg-slate-800 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Modal Scrollable Content */}
+            <div className="p-5 sm:p-6 overflow-y-auto flex-1 text-slate-300 space-y-6 custom-scrollbar text-sm leading-relaxed">
+              <h3 className="text-base sm:text-lg font-semibold text-white">Data Collection and Use</h3>
+              <p>
+                [Insert your full Privacy Policy text here. You can format it with standard HTML tags like paragraphs, lists, and headers.]
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
