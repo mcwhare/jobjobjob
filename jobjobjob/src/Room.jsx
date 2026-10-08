@@ -7,9 +7,10 @@ import GraphView from './GraphView';
 import { db } from '../firebaseConfig';
 import { collection, deleteDoc, doc, onSnapshot, writeBatch } from 'firebase/firestore';
 import { forceSimulation, forceY, forceX, forceManyBody, forceCollide } from 'd3-force';
+import { GRAPH_SETTINGS } from '../graphSettings';
 
 const STAGE_ORDER = ['Applied', 'OA', 'Screening', 'Interview 1', 'Interview 2', 'Offer', 'Rejected', 'Ghosted'];
-const ENDPOINT_GRID_SPACING = 220;
+
 const OUTCOME_COLORS = {
   rejected: '#ef4444',
   ghosted: '#374151',
@@ -192,7 +193,7 @@ function RoomContent({ roomId }) {
 
   useEffect(() => {
     const friendsRef = collection(db, 'rooms', roomId, 'friends');
-
+    
     const unsubscribe = onSnapshot(friendsRef, (snapshot) => {
       const allData = [];
       snapshot.forEach(doc => {
@@ -207,7 +208,7 @@ function RoomContent({ roomId }) {
 
       const uniqueFriends = [...new Set(allData.map(row => row.Friend))].filter(Boolean);
       const uniqueCompanies = [...new Set(allData.map(row => row.Company))].filter(Boolean);
-
+      
       const allStagesRaw = allData.flatMap(row => {
         if (!row.Stages) return [];
         return row.Stages.split(',').map(s => formatStageName(s.trim()));
@@ -232,7 +233,7 @@ function RoomContent({ roomId }) {
         if (depthData && depthData.count > 0) {
           return depthData.sum / depthData.count;
         }
-        return getStageProgress(stage) / 10;
+        return getStageProgress(stage) / 10; 
       };
 
       const orderedStages = [...uniqueStages].sort((a, b) => {
@@ -279,34 +280,30 @@ function RoomContent({ roomId }) {
           return getStageProgress(stageA) - getStageProgress(stageB);
         });
 
-      const centerX = 600;
-      const stageSpacing = 190;
-      const dynamicSpread = 350 + ((Math.max(1, orderedStages.length) - 1) * stageSpacing) / 2;
+      const centerX = 600; 
+      const dynamicSpread = GRAPH_SETTINGS.layout.baseSpread + ((Math.max(1, orderedStages.length) - 1) * GRAPH_SETTINGS.layout.stageSpacing) / 2;
       const columnFriendsX = centerX - dynamicSpread;
       const columnCompaniesX = centerX + dynamicSpread;
-
+      
       const friendColumns = Math.max(1, Math.ceil(Math.sqrt(uniqueFriends.length)));
       const friendRows = Math.ceil(uniqueFriends.length / friendColumns);
-      const friendLayoutBottom = 100 + Math.max(0, friendRows - 1) * ENDPOINT_GRID_SPACING;
-
-      // Calculate company node gravity wells utilizing the neat grid format
+      const friendLayoutBottom = 100 + Math.max(0, friendRows - 1) * GRAPH_SETTINGS.layout.endpointGridSpacing;
+      
+      // Calculate organic clusters instead of grids
       let companyLayoutBottom = 100;
       let hasCompanyLayoutRows = false;
       const companyNodes = companyGroups.flatMap(([stage, companies]) => {
-        const columns = Math.max(1, Math.ceil(Math.sqrt(companies.length / 2)));
-        const rows = Math.ceil(companies.length / columns);
-        const groupStartY = hasCompanyLayoutRows ? companyLayoutBottom + 100 : 100;
-
-        const groupNodes = companies.map((name, index) => {
+        
+        // Estimate the visual radius of the cluster so we can stack them cleanly
+        const clusterRadius = Math.max(120, Math.sqrt(companies.length) * 50);
+        
+        // Find the central target Y for the entire cluster
+        const targetY = hasCompanyLayoutRows ? companyLayoutBottom + clusterRadius + 50 : 100 + clusterRadius;
+        
+        const groupNodes = companies.map((name) => {
           const existingNode = d3NodesRef.current.find(n => n.id === `company-${name}`);
           const size = getNodeSize(name);
-          const row = Math.floor(index / columns);
-          const column = index % columns;
-
-          // Target grid coordinates act as the center of gravity
-          const targetX = columnCompaniesX + column * ENDPOINT_GRID_SPACING;
-          const targetY = groupStartY + row * ENDPOINT_GRID_SPACING;
-
+          
           return {
             id: `company-${name}`,
             isCompany: true,
@@ -322,20 +319,20 @@ function RoomContent({ roomId }) {
               borderColor: getOutcomeColor(stage)
             },
             radius: size / 2,
-            targetX: targetX,
-            targetY: targetY,
-            x: existingNode ? existingNode.x : targetX + (Math.random() - 0.5) * 50,
-            y: existingNode ? existingNode.y : targetY + (Math.random() - 0.5) * 50,
+            targetX: columnCompaniesX, // Everyone pulls to the same X 
+            targetY: targetY,          // Everyone pulls to the same center Y point
+            x: existingNode ? existingNode.x : columnCompaniesX + (Math.random() - 0.5) * GRAPH_SETTINGS.physics.initialJitter,
+            y: existingNode ? existingNode.y : targetY + (Math.random() - 0.5) * GRAPH_SETTINGS.physics.initialJitter,
             fx: existingNode ? existingNode.fx : null,
             fy: existingNode ? existingNode.fy : null
           };
         });
-
-        companyLayoutBottom = groupStartY + (rows - 1) * ENDPOINT_GRID_SPACING;
+        
+        companyLayoutBottom = targetY + clusterRadius;
         hasCompanyLayoutRows = true;
         return groupNodes;
       });
-
+      
       const centerY = Math.max(400, (100 + Math.max(friendLayoutBottom, companyLayoutBottom)) / 2);
 
       const friendNodes = uniqueFriends.map((name, index) => {
@@ -348,8 +345,8 @@ function RoomContent({ roomId }) {
           sourcePosition: Position.Right,
           targetPosition: Position.Left,
           position: nodePositionsRef.current.get(`friend-${name}`) || {
-            x: columnFriendsX - column * ENDPOINT_GRID_SPACING,
-            y: 100 + row * ENDPOINT_GRID_SPACING
+            x: columnFriendsX - column * GRAPH_SETTINGS.layout.endpointGridSpacing,
+            y: 100 + row * GRAPH_SETTINGS.layout.endpointGridSpacing
           },
           data: { label: name },
           className: circleNodeClass,
@@ -360,7 +357,7 @@ function RoomContent({ roomId }) {
       const stageNodes = orderedStages.map((stage, index) => {
         const existingNode = d3NodesRef.current.find(n => n.id === `stage-${stage}`);
         const size = getNodeSize(stage);
-        const targetX = centerX + (index - (orderedStages.length - 1) / 2) * stageSpacing;
+        const targetX = centerX + (index - (orderedStages.length - 1) / 2) * GRAPH_SETTINGS.layout.stageSpacing;
 
         return {
           id: `stage-${stage}`,
@@ -372,61 +369,61 @@ function RoomContent({ roomId }) {
           className: getStageClass(stage),
           style: { borderRadius: '50%', width: size, height: size },
           radius: size / 2,
-          targetX: targetX,
+          targetX: targetX, 
           targetY: centerY,
-          x: existingNode ? existingNode.x : targetX + (Math.random() - 0.5) * 50,
-          y: existingNode ? existingNode.y : centerY + (Math.random() - 0.5) * 50,
+          x: existingNode ? existingNode.x : targetX + (Math.random() - 0.5) * GRAPH_SETTINGS.physics.initialJitter,
+          y: existingNode ? existingNode.y : centerY + (Math.random() - 0.5) * GRAPH_SETTINGS.physics.initialJitter,
           fx: existingNode ? existingNode.fx : null,
           fy: existingNode ? existingNode.fy : null
         };
       });
-
+      
       d3NodesRef.current = [...stageNodes, ...companyNodes];
 
       const newEdges = [];
       allData.forEach((row, index) => {
         if (!row.Friend || !row.Company || !row.Stages) return;
-
+        
         const completedStages = row.Stages.split(',').map(s => formatStageName(s.trim()));
         if (completedStages.length === 0) return;
 
         const furthestStage = getFurthestStage(completedStages);
-        // Track the color of THIS specific application's final outcome to color the whole line
-        const applicationColor = getOutcomeColor(furthestStage);
-        const friendEdgeColor = getOutcomeColor(friendFurthestStages.get(row.Friend) || furthestStage);
+        const applicationColor = getOutcomeColor(furthestStage); 
 
         newEdges.push({
           id: `e-${row.Friend}-${completedStages[0]}-${index}-start`,
           source: `friend-${row.Friend}`,
           target: `stage-${completedStages[0]}`,
           type: 'multi',
-          markerEnd: { type: MarkerType.ArrowClosed, color: friendEdgeColor },
-          style: { stroke: friendEdgeColor, strokeWidth: 2 }
+          markerEnd: { type: MarkerType.ArrowClosed, color: applicationColor },
+          style: { stroke: applicationColor, strokeWidth: 2 }
         });
 
         for (let i = 0; i < completedStages.length - 1; i++) {
+          const sourceStageColor = getOutcomeColor(completedStages[i]);
+          
           newEdges.push({
-            id: `e-${completedStages[i]}-${completedStages[i + 1]}-${index}-mid`,
+            id: `e-${completedStages[i]}-${completedStages[i+1]}-${index}-mid`,
             source: `stage-${completedStages[i]}`,
-            target: `stage-${completedStages[i + 1]}`,
+            target: `stage-${completedStages[i+1]}`,
             type: 'multi',
-            markerEnd: { type: MarkerType.ArrowClosed, color: applicationColor },
-            style: { stroke: applicationColor, strokeWidth: 2 },
-            animated: true
+            markerEnd: { type: MarkerType.ArrowClosed, color: sourceStageColor },
+            style: { stroke: sourceStageColor, strokeWidth: 2 },
+            animated: true 
           });
         }
 
+        const finalStageColor = getOutcomeColor(furthestStage);
         newEdges.push({
           id: `e-${furthestStage}-${row.Company}-${index}-end`,
           source: `stage-${furthestStage}`,
           target: `company-${row.Company}`,
           type: 'multi',
-          markerEnd: { type: MarkerType.ArrowClosed, color: applicationColor },
-          style: { stroke: applicationColor, strokeWidth: 2 }
+          markerEnd: { type: MarkerType.ArrowClosed, color: finalStageColor },
+          style: { stroke: finalStageColor, strokeWidth: 2 }
         });
       });
 
-      // --- Group identical edges and calculate their curve offsets ---
       const edgeGroups = {};
       newEdges.forEach(edge => {
         const key = `${edge.source}-${edge.target}`;
@@ -438,23 +435,21 @@ function RoomContent({ roomId }) {
         group.forEach((edge, idx) => {
           edge.data = {
             ...edge.data,
-            offsetIndex: idx,         // 0, 1, 2, etc. (Which edge is this?)
-            totalEdges: group.length  // Total edges sharing this exact path
+            offsetIndex: idx,         
+            totalEdges: group.length  
           };
         });
       });
-      // -------------------------------------------------------------
 
       setEdges(newEdges);
 
       if (simulationRef.current) simulationRef.current.stop();
 
-      // Physics engine applies stronger gravity to companies so they maintain their grid shape
       simulationRef.current = forceSimulation(d3NodesRef.current)
-        .force('collide', forceCollide(d => (d.radius || 55) + 10).strength(1.2))
-        .force('x', forceX(d => d.targetX).strength(d => d.isCompany ? 0.15 : 0.18))
-        .force('y', forceY(d => d.targetY).strength(d => d.isCompany ? 0.15 : 0.04))
-        .force('charge', forceManyBody().strength(-400));
+        .force('collide', forceCollide(d => (d.radius || 55) + GRAPH_SETTINGS.physics.collisionRadiusOffset).strength(GRAPH_SETTINGS.physics.collisionStrength)) 
+        .force('x', forceX(d => d.targetX).strength(d => d.isCompany ? GRAPH_SETTINGS.physics.xGravityCompany : GRAPH_SETTINGS.physics.xGravityStage)) 
+        .force('y', forceY(d => d.targetY).strength(d => d.isCompany ? GRAPH_SETTINGS.physics.yGravityCompany : GRAPH_SETTINGS.physics.yGravityStage))       
+        .force('charge', forceManyBody().strength(GRAPH_SETTINGS.physics.repulsionStrength)); 
 
       simulationRef.current.on('tick', () => {
         const positionedSimNodes = d3NodesRef.current.map((node) => ({
@@ -490,7 +485,7 @@ function RoomContent({ roomId }) {
 
     if (!uploaderName.trim()) {
       alert("Please enter your name in the text box before uploading.");
-      event.target.value = null;
+      event.target.value = null; 
       return;
     }
 
@@ -542,7 +537,7 @@ function RoomContent({ roomId }) {
         }
 
         const data = results.data;
-
+        
         const formattedApplications = data.map(row => {
           const stagesRaw = row[stagesHeader]?.trim();
           return {
@@ -561,7 +556,7 @@ function RoomContent({ roomId }) {
         const batch = writeBatch(db);
         const friendRef = doc(db, 'rooms', roomId, 'friends', uploaderName.trim());
         batch.set(friendRef, { applications: formattedApplications });
-
+        
         await batch.commit();
         event.target.value = null;
       }
@@ -591,7 +586,7 @@ function RoomContent({ roomId }) {
 
         <div className="flex items-center gap-3">
           {/* Tutorial Button */}
-          <button
+          <button 
             onClick={() => setIsModalOpen(true)}
             className="w-9 h-9 flex items-center justify-center rounded-full bg-slate-800 border border-slate-700 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors shrink-0"
             title="How to use this app"
@@ -600,8 +595,8 @@ function RoomContent({ roomId }) {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </button>
-          <input
-            type="text"
+          <input 
+            type="text" 
             placeholder="Enter your name..."
             value={uploaderName}
             onChange={handleUploaderNameChange}
@@ -618,10 +613,10 @@ function RoomContent({ roomId }) {
       </div>
 
       <div className="flex-1 w-full relative">
-        <GraphView
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
+        <GraphView 
+          nodes={nodes} 
+          edges={edges} 
+          onNodesChange={onNodesChange} 
           onNodeDragStart={onNodeDragStart}
           onNodeDrag={onNodeDrag}
           onNodeDragStop={onNodeDragStop}
@@ -635,12 +630,11 @@ function RoomContent({ roomId }) {
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
           <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col relative overflow-hidden">
-
-            {/* Modal Header */}
+            
             <div className="flex justify-between items-center p-5 border-b border-slate-800 bg-slate-900/50">
               <h2 className="text-xl font-bold text-white">How to format your CSV</h2>
-              <button
-                onClick={() => setIsModalOpen(false)}
+              <button 
+                onClick={() => setIsModalOpen(false)} 
                 className="text-slate-400 hover:text-white p-1 rounded-md hover:bg-slate-800 transition-colors"
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -649,35 +643,34 @@ function RoomContent({ roomId }) {
               </button>
             </div>
 
-            {/* Modal Scrollable Content */}
             <div className="p-6 overflow-y-auto flex-1 text-slate-300 space-y-8 custom-scrollbar">
+               
+               <div>
+                 <h3 className="text-lg font-semibold text-white mb-2">1. Set up your columns</h3>
+                 <p className="text-sm leading-relaxed mb-4">
+                   Your spreadsheet must include exactly two headers: <strong>Company</strong> and <strong>Results</strong>. 
+                 </p>
+                 <div className="bg-slate-800 h-40 rounded-lg flex items-center justify-center border border-slate-700 overflow-hidden">
+                    <img src="/image_7e3e1e.png" alt="Column setup" className="w-full h-full object-cover" />
+                 </div>
+               </div>
 
-              <div>
-                <h3 className="text-lg font-semibold text-white mb-2">1. Set up your columns</h3>
-                <p className="text-sm leading-relaxed mb-4">
-                  Your spreadsheet must include exactly two headers: <strong>Company</strong> and <strong>Results</strong>.
-                </p>
-                <div className="bg-slate-800 h-40 rounded-lg flex items-center justify-center border border-slate-700 overflow-hidden">
-                  <span className="text-slate-500 font-medium">[ Replace with Image/Gif ]</span>
-                </div>
-              </div>
+               <div>
+                 <h3 className="text-lg font-semibold text-white mb-2">2. Enter your stages</h3>
+                 <p className="text-sm leading-relaxed mb-4">
+                   Separate your interview pipeline stages with commas in the Results column. The stages we currently track are: <span className="text-emerald-400">Applied, OA, Interview 1, Interview 2, Offer, Rejected,</span> and <span className="text-emerald-400">Ghosted</span>.
+                 </p>
+                 <div className="bg-slate-800 h-40 rounded-lg flex items-center justify-center border border-slate-700 overflow-hidden">
+                    <span className="text-slate-500 font-medium">[ Replace with Image/Gif ]</span>
+                 </div>
+               </div>
 
-              <div>
-                <h3 className="text-lg font-semibold text-white mb-2">2. Enter your stages</h3>
-                <p className="text-sm leading-relaxed mb-4">
-                  Separate your interview pipeline stages with commas in the Results column. The stages we currently track are: <span className="text-emerald-400">Applied, OA, Interview 1, Interview 2, Offer, Rejected,</span> and <span className="text-emerald-400">Ghosted</span>.
-                </p>
-                <div className="bg-slate-800 h-40 rounded-lg flex items-center justify-center border border-slate-700 overflow-hidden">
-                  <span className="text-slate-500 font-medium">[ Replace with Image/Gif ]</span>
-                </div>
-              </div>
-
-              <div>
-                <h3 className="text-lg font-semibold text-white mb-2">3. Upload and merge</h3>
-                <p className="text-sm leading-relaxed">
-                  Export your spreadsheet as a <strong>.csv</strong> file. Enter your name in the top right box, click Upload CSV, and watch your timeline merge into the group's network.
-                </p>
-              </div>
+               <div>
+                 <h3 className="text-lg font-semibold text-white mb-2">3. Upload and merge</h3>
+                 <p className="text-sm leading-relaxed">
+                   Export your spreadsheet as a <strong>.csv</strong> file. Enter your name in the top right box, click Upload CSV, and watch your timeline merge into the group's network.
+                 </p>
+               </div>
 
             </div>
           </div>
