@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { db } from '../firebaseConfig';
 import { doc, getDoc, setDoc, collection, getDocs, query, limit } from 'firebase/firestore';
@@ -13,6 +13,27 @@ export default function Home() {
   const [error, setError] = useState('');
   const [isChecking, setIsChecking] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+
+  const bgRef = useRef(null);
+
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      if (!bgRef.current) return;
+      
+      // Calculate offset (moves in opposite direction of mouse for parallax feel)
+      const moveX = (0.5 - e.clientX / window.innerWidth) * 10; 
+      const moveY = (0.5 - e.clientY / window.innerHeight) * 10;
+      
+      requestAnimationFrame(() => {
+        if (bgRef.current) {
+          bgRef.current.style.transform = `translate(${moveX}px, ${moveY}px) scale(1.05)`;
+        }
+      });
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, []);
 
   const handleCreateRoom = async () => {
     setIsCreating(true);
@@ -89,13 +110,20 @@ export default function Home() {
   };
 
   return (
-    // min-h-[100dvh] handles mobile browser toolbars better than min-h-screen
-    <div
-      className="flex flex-col items-center justify-center min-h-[100dvh] bg-[#060a14] font-sans p-4 sm:p-6 relative bg-cover bg-center overflow-x-hidden"
-      style={{ backgroundImage: `url("${bgImage}")` }}
-    >
+    <div className="flex flex-col items-center justify-center min-h-[100dvh] bg-[#060a14] font-sans p-4 sm:p-6 relative overflow-hidden">
+      
+      {/* Interactive Parallax Background Layer */}
+      <div 
+        ref={bgRef}
+        className="absolute inset-0 z-0 bg-cover bg-center will-change-transform ease-out duration-75"
+        style={{ 
+          backgroundImage: `url("${bgImage}")`,
+          transform: 'scale(1.05)' // Scaled up slightly so edges don't show when moving
+        }} 
+      />
+
       {/* Main Card Container */}
-      <div className="bg-[#0a0f1c]/90 backdrop-blur-md border border-slate-800 rounded-3xl p-6 sm:p-10 md:p-14 w-full max-w-[48rem] flex flex-col items-center shadow-2xl z-10 my-auto">
+      <div className="relative z-10 bg-[#0a0f1c]/90 backdrop-blur-md border border-slate-800 rounded-3xl p-6 sm:p-10 md:p-14 w-full max-w-[48rem] flex flex-col items-center shadow-2xl my-auto">
 
         {/* Logo - scales from 5rem tall on mobile to 10rem on large desktops */}
         <img
@@ -105,7 +133,7 @@ export default function Home() {
         />
 
         {/* Tagline */}
-        <h2 className="text-xl sm:text-2xl md:text-[1.7rem] font-bold mb-4 text-white text-center tracking-wide leading-tight">
+        <h2 className="text-xl sm:text-2xl md:text-[1.7rem] font-bold font-sans mb-4 text-white text-center tracking-wide leading-tight">
           Visualise your friend group's job hunt.
         </h2>
 
@@ -116,18 +144,18 @@ export default function Home() {
         </p>
         <br></br><br></br>
 
-        {/* Top Buttons Row - stacks on mobile, side-by-side on larger screens */}
+        {/* Top Buttons Row */}
         <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mb-8 md:mb-12 w-full sm:w-auto">
-          <button
+          <button 
             onClick={handleSeeExample}
-            className="px-6 sm:px-8 py-3 text-sm font-bold rounded-lg bg-[#cbd5e1] text-slate-900 hover:bg-slate-300 transition-colors shadow-md w-full sm:w-auto text-center"
+            className="px-6 sm:px-8 py-3 text-sm font-bold rounded-lg bg-[#cbd5e1] text-slate-900 hover:bg-white transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0 hover:shadow-lg shadow-md w-full sm:w-auto text-center cursor-pointer"
           >
             See Example
           </button>
-          <button
+          <button 
             onClick={handleCreateRoom}
             disabled={isCreating}
-            className={`px-6 sm:px-8 py-3 text-sm font-bold rounded-lg text-white transition-colors shadow-lg shadow-blue-500/20 w-full sm:w-auto text-center ${isCreating ? 'bg-blue-800 cursor-not-allowed' : 'bg-[#0070f3] hover:bg-blue-600'}`}
+            className={`px-6 sm:px-8 py-3 text-sm font-bold rounded-lg text-white transition-all duration-200 w-full sm:w-auto text-center ${isCreating ? 'bg-blue-800 cursor-not-allowed shadow-none' : 'bg-[#0070f3] hover:bg-blue-500 hover:-translate-y-0.5 active:translate-y-0 shadow-lg shadow-blue-500/20 hover:shadow-blue-500/40 cursor-pointer'}`}
           >
             {isCreating ? 'Creating...' : 'Create New Room'}
           </button>
@@ -152,7 +180,7 @@ export default function Home() {
             <button
               type="submit"
               disabled={isChecking}
-              className={`px-6 sm:px-8 py-3 text-sm font-bold rounded-lg text-white transition-colors shadow-md w-full sm:w-auto whitespace-nowrap ${isChecking ? 'bg-slate-600 cursor-not-allowed' : 'bg-[#334155] hover:bg-slate-500'}`}
+              className={`px-6 sm:px-8 py-3 text-sm font-bold rounded-lg text-white transition-all duration-200 w-full sm:w-auto whitespace-nowrap ${isChecking ? 'bg-slate-600 cursor-not-allowed shadow-none' : 'bg-[#334155] hover:bg-slate-500 hover:-translate-y-0.5 active:translate-y-0 shadow-md hover:shadow-lg cursor-pointer'}`}
             >
               {isChecking ? 'Checking...' : 'Join Room'}
             </button>
@@ -180,8 +208,14 @@ export default function Home() {
 
       {/* Privacy Policy Modal */}
       {isPrivacyModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm transition-opacity">
-          <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col relative overflow-hidden">
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm transition-opacity"
+          onClick={() => setIsPrivacyModalOpen(false)} // 1. Closes modal when clicking the background
+        >
+          <div 
+            className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col relative overflow-hidden"
+            onClick={(e) => e.stopPropagation()} // 2. Prevents clicks inside the modal from closing it
+          >
 
             {/* Modal Header */}
             <div className="flex justify-between items-center p-4 sm:p-5 border-b border-slate-800 bg-slate-900/50">

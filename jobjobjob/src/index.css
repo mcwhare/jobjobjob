@@ -1,4 +1,12 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&family=Manrope:wght@200..800&display=swap');
 @import "tailwindcss";
+
+
+/* 3. Override the default fonts */
+@theme {
+  --font-sans: "Manrope", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+}
 
 :root {
   --text: #6b6375;
@@ -135,4 +143,39 @@ code {
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background-color: #475569; /* slate-600 */
+}
+
+/* --- React Flow Dark Theme Overrides --- */
+
+/* The main controls panel (Zoom in/out, fit view, etc.) */
+.react-flow__controls {
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.5), 0 4px 6px -4px rgb(0 0 0 / 0.5) !important;
+  border-radius: 0.5rem !important;
+  overflow: hidden !important;
+  border: 1px solid #334155 !important; /* border-slate-700 */
+}
+
+/* The individual buttons */
+.react-flow__controls-button {
+  background-color: #1e293b !important; /* bg-slate-800 */
+  border-bottom: 1px solid #334155 !important; /* border-slate-700 */
+  fill: #94a3b8 !important; /* text-slate-400 (icon color) */
+  transition: all 0.2s ease !important;
+}
+
+/* Button hover state */
+.react-flow__controls-button:hover {
+  background-color: #334155 !important; /* hover:bg-slate-700 */
+  fill: #f8fafc !important; /* hover text-slate-50 */
+}
+
+/* Remove the border from the very last button so it looks clean */
+.react-flow__controls-button:last-child {
+  border-bottom: none !important;
+}
+
+/* (Optional) If you also want the tiny connection dots on the nodes to be dark */
+.react-flow__handle {
+  background-color: #1e293b !important;
+  border: 2px solid #475569 !important;
 }
