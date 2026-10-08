@@ -112,6 +112,7 @@ export default function Room() {
 
 function RoomContent({ roomId }) {
   const navigate = useNavigate();
+  const isExampleRoom = roomId === 'example';
   const [nodes, setNodes] = useState([]);
   const [edges, setEdges] = useState([]);
   const [uploaderName, setUploaderName] = useState(() => {
@@ -149,6 +150,10 @@ function RoomContent({ roomId }) {
   };
 
   const handleDeleteFriend = useCallback(async (node) => {
+    if (isExampleRoom) {
+      alert("Modifications are disabled in the example room.");
+      return;
+    }
     const friendName = node.data.label;
     if (!window.confirm(`Delete ${friendName} and all of their uploaded entries from this room?`)) {
       return;
@@ -618,20 +623,29 @@ function RoomContent({ roomId }) {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </button>
-          <input 
-            type="text" 
-            placeholder="Enter your name..."
-            value={uploaderName}
-            onChange={handleUploaderNameChange}
-            className="px-3 py-2 bg-slate-800 text-white border border-slate-700 rounded-md text-sm focus:outline-none focus:border-emerald-500 w-40"
-          />
-          <label className="cursor-pointer px-4 py-2 text-sm font-bold rounded-md bg-emerald-600 text-white hover:bg-emerald-500 transition-colors shadow-md flex items-center gap-2">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-            </svg>
-            Upload CSV
-            <input type="file" accept=".csv" className="hidden" onChange={handleFileUpload} />
-          </label>
+
+          {isExampleRoom ? (
+            <div className="px-4 py-2 bg-slate-800/50 border border-slate-700 rounded-md text-slate-400 text-sm font-medium tracking-wide shadow-inner cursor-not-allowed">
+              Read-Only Example
+            </div>
+          ) : (
+            <>
+              <input 
+                type="text" 
+                placeholder="Enter your name..."
+                value={uploaderName}
+                onChange={handleUploaderNameChange}
+                className="px-3 py-2 bg-slate-800 text-white border border-slate-700 rounded-md text-sm focus:outline-none focus:border-emerald-500 w-40"
+              />
+              <label className="cursor-pointer px-4 py-2 text-sm font-bold rounded-md bg-emerald-600 text-white hover:bg-emerald-500 transition-colors shadow-md flex items-center gap-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                </svg>
+                Upload CSV
+                <input type="file" accept=".csv" className="hidden" onChange={handleFileUpload} />
+              </label>
+            </>
+          )}
         </div>
       </div>
 
@@ -650,9 +664,16 @@ function RoomContent({ roomId }) {
       </div>
 
       {/* Tutorial Modal */}
+      {/* Tutorial Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col relative overflow-hidden">
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+          onClick={() => setIsModalOpen(false)} 
+        >
+          <div 
+            className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col relative overflow-hidden"
+            onClick={(e) => e.stopPropagation()} 
+          >
             
             <div className="flex justify-between items-center p-5 border-b border-slate-800 bg-slate-900/50">
               <h2 className="text-xl font-bold text-white">How to format your CSV</h2>
@@ -671,20 +692,21 @@ function RoomContent({ roomId }) {
                <div>
                  <h3 className="text-lg font-semibold text-white mb-2">1. Set up your columns</h3>
                  <p className="text-sm leading-relaxed mb-4">
-                   Your spreadsheet must include exactly two headers: <strong>Company</strong> and <strong>Results</strong>. 
+                   Your spreadsheet must include two headers: <strong>Company</strong> and <strong>Results</strong>. 
                  </p>
                  <div className="bg-slate-800 h-40 rounded-lg flex items-center justify-center border border-slate-700 overflow-hidden">
-                    <img src="/image_7e3e1e.png" alt="Column setup" className="w-full h-full object-cover" />
+                    <img src="/tutorial1.png" alt="Column setup" className="w-full h-full object-cover" />
                  </div>
                </div>
 
                <div>
                  <h3 className="text-lg font-semibold text-white mb-2">2. Enter your stages</h3>
                  <p className="text-sm leading-relaxed mb-4">
-                   Separate your interview pipeline stages with commas in the Results column. The stages we currently track are: <span className="text-emerald-400">Applied, OA, Interview 1, Interview 2, Offer, Rejected,</span> and <span className="text-emerald-400">Ghosted</span>.
+                   Separate your interview pipeline stages with commas in the Results column. The specific stages we currently track are: <span className="text-emerald-400">Applied, Interview, Offer, Rejected, Accepted,</span> and <span className="text-emerald-400">Ghosted</span>.
+                   You can add more stages, but the graph may look disorganised.
                  </p>
                  <div className="bg-slate-800 h-40 rounded-lg flex items-center justify-center border border-slate-700 overflow-hidden">
-                    <span className="text-slate-500 font-medium">[ Replace with Image/Gif ]</span>
+                    <img src="/tutorial2.png" alt="Column setup" className="w-full h-full object-cover" />
                  </div>
                </div>
 
