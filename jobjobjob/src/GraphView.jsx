@@ -3,6 +3,7 @@ import ReactFlow, { Background, Controls, Handle, Position, useReactFlow, ReactF
 import 'reactflow/dist/style.css';
 
 import { GRAPH_SETTINGS } from '../graphSettings';
+import { EDGE_HANDLE_POSITIONS } from './edgeHandlePositions';
 
 // Custom edge that bows outwards when multiple edges share the same start and end points
 function MultiEdge({ sourceX, sourceY, targetX, targetY, style, markerEnd, data }) {
@@ -30,25 +31,25 @@ function MultiEdge({ sourceX, sourceY, targetX, targetY, style, markerEnd, data 
 }
 
 const edgeTypes = { multi: MultiEdge };
-const HANDLE_POSITIONS = [
-  { id: '15', x: 0.15, y: 0.15 },
-  { id: '25', x: 0.07, y: 0.25 },
-  { id: '50', x: 0, y: 0.5 },
-  { id: '75', x: 0.07, y: 0.75 },
-  { id: '85', x: 0.15, y: 0.85 }
-];
 
 function DynamicCircleNode({ data, isConnectable }) {
+  const getHandleStyle = (point) => ({
+    left: `${point.x * 100}%`,
+    top: `${point.y * 100}%`,
+    opacity: 0,
+    transform: 'translate(-50%, -50%)'
+  });
+
   return (
     <>
-      {HANDLE_POSITIONS.flatMap(({ id, x, y }) => [
+      {EDGE_HANDLE_POSITIONS.flatMap(({ id, left, right }) => [
         <Handle
           key={`left-${id}`}
           id={`target-left-${id}`}
           type="target"
           position={Position.Left}
           isConnectable={isConnectable}
-          style={{ left: `${x * 100}%`, top: `${y * 100}%`, opacity: 0 }}
+          style={getHandleStyle(left)}
         />,
         <Handle
           key={`right-${id}`}
@@ -56,7 +57,7 @@ function DynamicCircleNode({ data, isConnectable }) {
           type="source"
           position={Position.Right}
           isConnectable={isConnectable}
-          style={{ left: `${(1 - x) * 100}%`, top: `${y * 100}%`, opacity: 0 }}
+          style={getHandleStyle(right)}
         />,
         <Handle
           key={`left-source-${id}`}
@@ -64,7 +65,7 @@ function DynamicCircleNode({ data, isConnectable }) {
           type="source"
           position={Position.Left}
           isConnectable={isConnectable}
-          style={{ left: `${x * 100}%`, top: `${y * 100}%`, opacity: 0 }}
+          style={getHandleStyle(left)}
         />,
         <Handle
           key={`right-target-${id}`}
@@ -72,7 +73,7 @@ function DynamicCircleNode({ data, isConnectable }) {
           type="target"
           position={Position.Right}
           isConnectable={isConnectable}
-          style={{ left: `${(1 - x) * 100}%`, top: `${y * 100}%`, opacity: 0 }}
+          style={getHandleStyle(right)}
         />
       ])}
       {data.label}
@@ -81,6 +82,14 @@ function DynamicCircleNode({ data, isConnectable }) {
 }
 
 const nodeTypes = { dynamicCircle: DynamicCircleNode };
+
+const EDGE_LEGEND_ITEMS = [
+  { color: '#ef4444', label: 'Rejected' },
+  { color: '#374151', label: 'Ghosted' },
+  { color: '#3b82f6', label: 'Accepted' },
+  { color: '#22c55e', label: 'Offered' },
+  { color: '#cbd5e1', label: 'Other' }
+];
 
 function AutoFitView({ nodes }) {
   const { fitView } = useReactFlow();
@@ -108,6 +117,8 @@ export default function GraphView({
   onPanEnabledChange,
 }) {
   const [contextMenu, setContextMenu] = useState(null);
+  const displayedEdgeColors = new Set(edges.map((edge) => edge.style?.stroke?.toLowerCase()));
+  const visibleLegendItems = EDGE_LEGEND_ITEMS.filter(({ color }) => displayedEdgeColors.has(color));
 
   return (
     <div className="w-full h-full bg-slate-950">
@@ -159,6 +170,22 @@ export default function GraphView({
           </Controls>
           <AutoFitView nodes={nodes} />
         </ReactFlow>
+        {visibleLegendItems.length > 0 && (
+          <div
+            aria-label="Edge color legend"
+            className="absolute bottom-3 right-3 z-10 rounded-lg border border-slate-700 bg-slate-900/95 p-3 text-xs text-slate-200 shadow-xl sm:bottom-4 sm:right-4"
+          >
+            <h2 className="mb-2 text-xs font-semibold text-white">Edge colors</h2>
+            <ul className="grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-1">
+              {visibleLegendItems.map(({ color, label }) => (
+                <li key={color} className="flex items-center gap-2">
+                  <span className="h-0.5 w-6 shrink-0" style={{ backgroundColor: color }} />
+                  <span>{label}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         {contextMenu && (
           <div
             className="fixed z-[1000] min-w-44 rounded-md border border-slate-700 bg-slate-800 p-1 shadow-xl"

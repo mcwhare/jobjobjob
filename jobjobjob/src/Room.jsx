@@ -1,149 +1,24 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import Papa from 'papaparse';
-import { MarkerType, Position, applyNodeChanges } from 'reactflow';
+import { applyNodeChanges } from 'reactflow';
 import GraphView from './GraphView';
 import TutorialArrows from './TutorialArrows';
+import { buildRoomGraph, updateEdgeHandles } from './graphBuilder';
 
 import { db } from '../firebaseConfig';
 import { collection, deleteDoc, doc, onSnapshot, writeBatch } from 'firebase/firestore';
-import { forceSimulation, forceY, forceX, forceManyBody, forceCollide } from 'd3-force';
+import { forceSimulation, forceY, forceX, forceManyBody, forceCollide, forceLink } from 'd3-force';
 import { GRAPH_SETTINGS } from '../graphSettings';
 import logoImage from './assets/jjj logo trans.svg';
 import tutorialOne from './assets/tutorial1.png';
 import tutorialTwo from './assets/tutorial2.png';
-
-const STAGE_ORDER = ['Applied', 'Online Assessment', 'Screening', 'Interview 1', 'Interview 2', 'Offer', 'Rejected', 'Ghosted', 'Accepted'];
-
-const OUTCOME_COLORS = {
-  rejected: '#ef4444',
-  ghosted: '#374151',
-  accepted: '#3b82f6',
-  offered: '#22c55e',
-  default: '#cbd5e1'
-};
-const EDGE_HANDLE_POSITIONS = [
-  { id: '15', x: 0.15, y: 0.15 },
-  { id: '25', x: 0.07, y: 0.25 },
-  { id: '50', x: 0, y: 0.5 },
-  { id: '75', x: 0.07, y: 0.75 },
-  { id: '85', x: 0.15, y: 0.85 }
-];
-
-const circleNodeClass = "bg-white text-slate-900 border-2 border-white rounded-full flex justify-center items-center text-xs font-bold shadow-lg";
-
-const getNodeSize = (label) => {
-  const safeLabel = (label || '').replace(/\s+/g, '');
-  const estimatedWidth = Math.max(82, Math.min(180, 72 + safeLabel.length * 6));
-  return estimatedWidth;
-};
-
-const getStageCategory = (stage) => {
-  const normalizedStage = stage.toLowerCase().replace(/[^a-z]/g, '');
-  if (normalizedStage.startsWith('reject')) return 'rejected';
-  if (normalizedStage.startsWith('ghost')) return 'ghosted';
-  if (normalizedStage.startsWith('accept')) return 'accepted';
-  if (normalizedStage.startsWith('offer')) return 'offered';
-  if (normalizedStage.startsWith('apply')) return 'applied';
-  if (normalizedStage.startsWith('online') || normalizedStage.includes('assessment')) return 'assessment';
-  if (normalizedStage.startsWith('screen') || normalizedStage.includes('phone')) return 'screening';
-  if (normalizedStage.startsWith('interview')) return 'interview';
-  return 'other';
-};
-
-const getStageProgress = (stage) => {
-  const category = getStageCategory(stage);
-  if (category === 'applied') return 0;
-  if (category === 'assessment') return 1;
-  if (category === 'screening') return 2;
-  if (category === 'interview') {
-    const interviewNumber = Number(stage.match(/\d+/)?.[0]);
-    return interviewNumber ? 2 + interviewNumber : 3;
-  }
-  if (category === 'offered') return 6;
-  if (category === 'accepted') return 7;
-  if (category === 'rejected') return 8;
-  if (category === 'ghosted') return 9;
-  const knownStageIndex = STAGE_ORDER.indexOf(stage);
-  return knownStageIndex === -1 ? 4 : knownStageIndex;
-};
-
-const getFurthestStage = (stages) => stages.reduce((furthest, stage) => (
-  !furthest || getStageProgress(stage) > getStageProgress(furthest) ? stage : furthest
-), '');
-
-const getOutcomeColor = (stage) => OUTCOME_COLORS[getStageCategory(stage)] || OUTCOME_COLORS.default;
-
-const getStageClass = () => {
-  return "bg-white text-slate-900 border-2 border-white rounded-full flex justify-center items-center text-[10px] font-bold shadow-lg text-center p-2";
-};
-
-const formatStageName = (stageInput) => {
-  const trimmedStage = stageInput.trim();
-  const category = getStageCategory(trimmedStage);
-  const canonicalNames = {
-    applied: 'Applied',
-    offered: 'Offer',
-    accepted: 'Accepted',
-    rejected: 'Rejected',
-    ghosted: 'Ghosted'
-  };
-  if (canonicalNames[category]) return canonicalNames[category];
-  if (category === 'assessment') return 'Online Assessment';
-  if (category === 'interview') {
-    const interviewNumber = Number(trimmedStage.match(/\d+/)?.[0]) || 1;
-    return `Interview ${interviewNumber}`;
-  }
-  return `${trimmedStage.charAt(0).toUpperCase()}${trimmedStage.slice(1)}`;
-};
 
 const normalizeCsvHeader = (header) => header.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
 
 const findCsvHeader = (headers, aliases) => {
   const normalizedAliases = new Set(aliases);
   return headers.find((header) => normalizedAliases.has(normalizeCsvHeader(header)));
-};
-
-const getNodeHandleId = (node, towardCenter, side, role) => {
-  const width = node.style?.width || 75;
-  const height = node.style?.height || 75;
-  const centerX = node.position.x + width / 2;
-  const centerY = node.position.y + height / 2;
-  const directionX = towardCenter.x - centerX;
-  const directionY = towardCenter.y - centerY;
-  const directionLength = Math.hypot(directionX, directionY) || 1;
-
-  const closestPosition = EDGE_HANDLE_POSITIONS.reduce((closest, position) => {
-    const x = side === 'right' ? 0.5 - position.x : position.x - 0.5;
-    const y = position.y - 0.5;
-    const score = (x * directionX + y * directionY) / directionLength;
-    return !closest || score > closest.score ? { id: position.id, score } : closest;
-  }, null);
-
-  return `${role}-${side}-${closestPosition.id}`;
-};
-
-const getEdgeHandles = (sourceNode, targetNode) => {
-  const sourceWidth = sourceNode.style?.width || 75;
-  const sourceHeight = sourceNode.style?.height || 75;
-  const targetWidth = targetNode.style?.width || 75;
-  const targetHeight = targetNode.style?.height || 75;
-  const sourceCenter = {
-    x: sourceNode.position.x + sourceWidth / 2,
-    y: sourceNode.position.y + sourceHeight / 2
-  };
-  const targetCenter = {
-    x: targetNode.position.x + targetWidth / 2,
-    y: targetNode.position.y + targetHeight / 2
-  };
-
-  const sourceSide = targetCenter.x >= sourceCenter.x ? 'right' : 'left';
-  const targetSide = sourceSide === 'right' ? 'left' : 'right';
-
-  return {
-    sourceHandle: getNodeHandleId(sourceNode, targetCenter, sourceSide, 'source'),
-    targetHandle: getNodeHandleId(targetNode, sourceCenter, targetSide, 'target')
-  };
 };
 
 export default function Room() {
@@ -286,256 +161,13 @@ function RoomContent({ roomId }) {
         return;
       }
 
-      const uniqueFriends = [...new Set(allData.map(row => row.Friend))].filter(Boolean);
-      const uniqueCompanies = [...new Set(allData.map(row => row.Company))].filter(Boolean);
-
-      const allStagesRaw = allData.flatMap(row => {
-        if (!row.Stages) return [];
-        return row.Stages.split(',').map(s => formatStageName(s.trim()));
-      });
-      const uniqueStages = [...new Set(allStagesRaw)].filter(Boolean);
-
-      const stageDepths = new Map();
-      allData.forEach((row) => {
-        if (!row.Stages) return;
-        const completedStages = row.Stages.split(',').map(s => formatStageName(s.trim()));
-        if (completedStages.length > 1) {
-          completedStages.forEach((stage, i) => {
-            const depth = i / (completedStages.length - 1);
-            const current = stageDepths.get(stage) || { sum: 0, count: 0 };
-            stageDepths.set(stage, { sum: current.sum + depth, count: current.count + 1 });
-          });
-        }
-      });
-
-      const getStageDepth = (stage) => {
-        const depthData = stageDepths.get(stage);
-        if (depthData && depthData.count > 0) {
-          return depthData.sum / depthData.count;
-        }
-        return getStageProgress(stage) / 10;
-      };
-
-      const orderedStages = [...uniqueStages].sort((a, b) => {
-        const diff = getStageDepth(a) - getStageDepth(b);
-        return Math.abs(diff) > 0.001 ? diff : a.localeCompare(b);
-      });
-
-      const companyFurthestStages = new Map();
-      const friendFurthestStages = new Map();
-
-      allData.forEach((row) => {
-        if (!row.Stages) return;
-
-        const completedStages = row.Stages
-          .split(',')
-          .map(s => formatStageName(s.trim()));
-        const furthestStage = getFurthestStage(completedStages);
-
-        if (row.Company) {
-          const previousCompanyStage = companyFurthestStages.get(row.Company);
-          if (!previousCompanyStage
-            || getStageProgress(furthestStage) > getStageProgress(previousCompanyStage)) {
-            companyFurthestStages.set(row.Company, furthestStage);
-          }
-        }
-        if (row.Friend) {
-          const previousFriendStage = friendFurthestStages.get(row.Friend);
-          if (!previousFriendStage
-            || getStageProgress(furthestStage) > getStageProgress(previousFriendStage)) {
-            friendFurthestStages.set(row.Friend, furthestStage);
-          }
-        }
-      });
-
-      const companiesByFurthestStage = new Map();
-      uniqueCompanies.forEach((company) => {
-        const stage = companyFurthestStages.get(company) || 'Unknown';
-        const companies = companiesByFurthestStage.get(stage) || [];
-        companies.push(company);
-        companiesByFurthestStage.set(stage, companies);
-      });
-      const companyGroups = [...companiesByFurthestStage.entries()]
-        .sort(([stageA], [stageB]) => {
-          return getStageProgress(stageA) - getStageProgress(stageB);
-        });
-
-      const centerX = 600;
-      const dynamicSpread = GRAPH_SETTINGS.layout.baseSpread + ((Math.max(1, orderedStages.length) - 1) * GRAPH_SETTINGS.layout.stageSpacing) / 2;
-      const columnFriendsX = centerX - dynamicSpread;
-      const columnCompaniesX = centerX + dynamicSpread;
-
-      const friendColumns = Math.max(1, Math.ceil(Math.sqrt(uniqueFriends.length)));
-      const friendRows = Math.ceil(uniqueFriends.length / friendColumns);
-      const friendLayoutBottom = 100 + Math.max(0, friendRows - 1) * GRAPH_SETTINGS.layout.endpointGridSpacing;
-
-      // Calculate organic clusters instead of grids
-      let companyLayoutBottom = 100;
-      let hasCompanyLayoutRows = false;
-      const companyNodes = companyGroups.flatMap(([, companies]) => {
-        const clusterRadius = Math.max(120, Math.sqrt(companies.length) * 50);
-        const targetY = hasCompanyLayoutRows ? companyLayoutBottom + clusterRadius + 50 : 100 + clusterRadius;
-
-        const groupNodes = companies.map((name) => {
-          const existingNode = d3NodesRef.current.find(n => n.id === `company-${name}`);
-          const size = getNodeSize(name);
-
-          return {
-            id: `company-${name}`,
-            isCompany: true,
-            type: 'dynamicCircle',
-            sourcePosition: Position.Right,
-            targetPosition: Position.Left,
-            data: { label: name },
-            className: circleNodeClass,
-            style: {
-              borderRadius: '50%',
-              width: size,
-              height: size
-            },
-            radius: size / 2,
-            targetX: columnCompaniesX,
-            targetY: targetY,
-            x: existingNode ? existingNode.x : columnCompaniesX + (Math.random() - 0.5) * GRAPH_SETTINGS.physics.initialJitter,
-            y: existingNode ? existingNode.y : targetY + (Math.random() - 0.5) * GRAPH_SETTINGS.physics.initialJitter,
-            fx: existingNode ? existingNode.fx : null,
-            fy: existingNode ? existingNode.fy : null
-          };
-        });
-
-        companyLayoutBottom = targetY + clusterRadius;
-        hasCompanyLayoutRows = true;
-        return groupNodes;
-      });
-
-      const centerY = Math.max(400, (100 + Math.max(friendLayoutBottom, companyLayoutBottom)) / 2);
-
-      const friendNodes = uniqueFriends.map((name, index) => {
-        const size = getNodeSize(name);
-        const row = Math.floor(index / friendColumns);
-        const column = index % friendColumns;
-        return {
-          id: `friend-${name}`,
-          type: 'dynamicCircle',
-          sourcePosition: Position.Right,
-          targetPosition: Position.Left,
-          position: nodePositionsRef.current.get(`friend-${name}`) || {
-            x: columnFriendsX - column * GRAPH_SETTINGS.layout.endpointGridSpacing,
-            y: 100 + row * GRAPH_SETTINGS.layout.endpointGridSpacing
-          },
-          data: { label: name },
-          className: circleNodeClass,
-          style: { borderRadius: '50%', width: size, height: size }
-        };
-      });
-
-      const stageNodes = orderedStages.map((stage, index) => {
-        const existingNode = d3NodesRef.current.find(n => n.id === `stage-${stage}`);
-        const size = getNodeSize(stage);
-        const targetX = centerX + (index - (orderedStages.length - 1) / 2) * GRAPH_SETTINGS.layout.stageSpacing;
-
-        return {
-          id: `stage-${stage}`,
-          isCompany: false,
-          type: 'dynamicCircle',
-          sourcePosition: Position.Right,
-          targetPosition: Position.Left,
-          data: { label: stage },
-          className: getStageClass(stage),
-          style: { borderRadius: '50%', width: size, height: size },
-          radius: size / 2,
-          targetX: targetX,
-          targetY: centerY,
-          x: existingNode ? existingNode.x : targetX + (Math.random() - 0.5) * GRAPH_SETTINGS.physics.initialJitter,
-          y: existingNode ? existingNode.y : centerY + (Math.random() - 0.5) * GRAPH_SETTINGS.physics.initialJitter,
-          fx: existingNode ? existingNode.fx : null,
-          fy: existingNode ? existingNode.fy : null
-        };
-      });
-
-      d3NodesRef.current = [...stageNodes, ...companyNodes];
-
-      const nodeGeometryById = new Map([
-        ...friendNodes,
-        ...stageNodes.map((node) => ({
-          ...node,
-          position: { x: node.x, y: node.y }
-        })),
-        ...companyNodes.map((node) => ({
-          ...node,
-          position: { x: node.x, y: node.y }
-        }))
-      ].map((node) => [node.id, node]));
-
-      const newEdges = [];
-      allData.forEach((row, index) => {
-        if (!row.Friend || !row.Company || !row.Stages) return;
-
-        const completedStages = row.Stages.split(',').map(s => formatStageName(s.trim()));
-        if (completedStages.length === 0) return;
-
-        const furthestStage = getFurthestStage(completedStages);
-        const applicationColor = getOutcomeColor(furthestStage);
-
-        newEdges.push({
-          id: `e-${row.Friend}-${completedStages[0]}-${index}-start`,
-          source: `friend-${row.Friend}`,
-          target: `stage-${completedStages[0]}`,
-          type: 'multi',
-          markerEnd: { type: MarkerType.ArrowClosed, color: applicationColor },
-          style: { stroke: applicationColor, strokeWidth: 2 }
-        });
-
-        for (let i = 0; i < completedStages.length - 1; i++) {
-          const sourceStageColor = getOutcomeColor(completedStages[i]);
-
-          newEdges.push({
-            id: `e-${completedStages[i]}-${completedStages[i + 1]}-${index}-mid`,
-            source: `stage-${completedStages[i]}`,
-            target: `stage-${completedStages[i + 1]}`,
-            type: 'multi',
-            markerEnd: { type: MarkerType.ArrowClosed, color: sourceStageColor },
-            style: { stroke: sourceStageColor, strokeWidth: 2 },
-            animated: true
-          });
-        }
-
-        const finalStageColor = getOutcomeColor(furthestStage);
-        newEdges.push({
-          id: `e-${furthestStage}-${row.Company}-${index}-end`,
-          source: `stage-${furthestStage}`,
-          target: `company-${row.Company}`,
-          type: 'multi',
-          markerEnd: { type: MarkerType.ArrowClosed, color: finalStageColor },
-          style: { stroke: finalStageColor, strokeWidth: 2 }
-        });
-      });
-
-      const edgeGroups = {};
-      newEdges.forEach(edge => {
-        const key = `${edge.source}-${edge.target}`;
-        if (!edgeGroups[key]) edgeGroups[key] = [];
-        edgeGroups[key].push(edge);
-      });
-
-      Object.values(edgeGroups).forEach(group => {
-        group.forEach((edge, idx) => {
-          edge.data = {
-            ...edge.data,
-            offsetIndex: idx,
-            totalEdges: group.length
-          };
-        });
-      });
-
-      setEdges(newEdges.map((edge) => {
-        const sourceNode = nodeGeometryById.get(edge.source);
-        const targetNode = nodeGeometryById.get(edge.target);
-        return sourceNode && targetNode
-          ? { ...edge, ...getEdgeHandles(sourceNode, targetNode) }
-          : edge;
-      }));
-
+      const { friendNodes, simulationNodes, edges: graphEdges, attractionLinks } = buildRoomGraph(
+        allData,
+        d3NodesRef.current,
+        nodePositionsRef.current
+      );
+      d3NodesRef.current = simulationNodes;
+      setEdges(graphEdges);
       if (simulationRef.current) simulationRef.current.stop();
 
       simulationRef.current = forceSimulation(d3NodesRef.current)
@@ -546,7 +178,14 @@ function RoomContent({ roomId }) {
           d.isCompany
             ? GRAPH_SETTINGS.physics.repulsionStrengthCompany
             : GRAPH_SETTINGS.physics.repulsionStrengthStage
-        )));
+        )))
+        .force('stage-company-attraction', forceLink(attractionLinks)
+          .id(node => node.id)
+          .distance(link => Math.hypot(
+            link.source.targetX - link.target.targetX,
+            link.source.targetY - link.target.targetY
+          ))
+          .strength(GRAPH_SETTINGS.physics.stageCompanyAttractionStrength));
 
       simulationRef.current.on('tick', () => {
         const positionedSimNodes = d3NodesRef.current.map((node) => ({
@@ -565,10 +204,14 @@ function RoomContent({ roomId }) {
           position: nodePositionsRef.current.get(node.id) || node.position
         }));
 
-        setNodes([
+        const currentNodes = [
           ...preserveDraggedPositions(friendNodes),
           ...positionedSimNodes
-        ]);
+        ];
+        setNodes(currentNodes);
+        setEdges((currentEdges) => {
+          return updateEdgeHandles(currentEdges, currentNodes);
+        });
       });
 
     });
