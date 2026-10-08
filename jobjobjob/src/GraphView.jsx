@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import ReactFlow, { Background, Controls, useReactFlow, ReactFlowProvider, BaseEdge } from 'reactflow';
+import ReactFlow, { Background, Controls, Handle, Position, useReactFlow, ReactFlowProvider, BaseEdge } from 'reactflow';
 import 'reactflow/dist/style.css';
 
 import { GRAPH_SETTINGS } from '../graphSettings';
@@ -30,6 +30,57 @@ function MultiEdge({ sourceX, sourceY, targetX, targetY, style, markerEnd, data 
 }
 
 const edgeTypes = { multi: MultiEdge };
+const HANDLE_POSITIONS = [
+  { id: '15', x: 0.15, y: 0.15 },
+  { id: '25', x: 0.07, y: 0.25 },
+  { id: '50', x: 0, y: 0.5 },
+  { id: '75', x: 0.07, y: 0.75 },
+  { id: '85', x: 0.15, y: 0.85 }
+];
+
+function DynamicCircleNode({ data, isConnectable }) {
+  return (
+    <>
+      {HANDLE_POSITIONS.flatMap(({ id, x, y }) => [
+        <Handle
+          key={`left-${id}`}
+          id={`target-left-${id}`}
+          type="target"
+          position={Position.Left}
+          isConnectable={isConnectable}
+          style={{ left: `${x * 100}%`, top: `${y * 100}%`, opacity: 0 }}
+        />,
+        <Handle
+          key={`right-${id}`}
+          id={`source-right-${id}`}
+          type="source"
+          position={Position.Right}
+          isConnectable={isConnectable}
+          style={{ left: `${(1 - x) * 100}%`, top: `${y * 100}%`, opacity: 0 }}
+        />,
+        <Handle
+          key={`left-source-${id}`}
+          id={`source-left-${id}`}
+          type="source"
+          position={Position.Left}
+          isConnectable={isConnectable}
+          style={{ left: `${x * 100}%`, top: `${y * 100}%`, opacity: 0 }}
+        />,
+        <Handle
+          key={`right-target-${id}`}
+          id={`target-right-${id}`}
+          type="target"
+          position={Position.Right}
+          isConnectable={isConnectable}
+          style={{ left: `${(1 - x) * 100}%`, top: `${y * 100}%`, opacity: 0 }}
+        />
+      ])}
+      {data.label}
+    </>
+  );
+}
+
+const nodeTypes = { dynamicCircle: DynamicCircleNode };
 
 function AutoFitView({ nodes }) {
   const { fitView } = useReactFlow();
@@ -64,6 +115,7 @@ export default function GraphView({
         <ReactFlow 
           nodes={nodes} 
           edges={edges} 
+          nodeTypes={nodeTypes}
           edgeTypes={edgeTypes} 
           onNodesChange={onNodesChange} 
           onNodeDragStart={onNodeDragStart}

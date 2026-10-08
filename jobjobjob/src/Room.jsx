@@ -22,8 +22,15 @@ const OUTCOME_COLORS = {
   offered: '#22c55e',
   default: '#cbd5e1'
 };
+const EDGE_HANDLE_POSITIONS = [
+  { id: '15', x: 0.15, y: 0.15 },
+  { id: '25', x: 0.07, y: 0.25 },
+  { id: '50', x: 0, y: 0.5 },
+  { id: '75', x: 0.07, y: 0.75 },
+  { id: '85', x: 0.15, y: 0.85 }
+];
 
-const circleNodeClass = "bg-slate-900 text-white border-2 border-slate-600 rounded-full flex justify-center items-center text-xs font-bold shadow-lg";
+const circleNodeClass = "bg-white text-slate-900 border-2 border-white rounded-full flex justify-center items-center text-xs font-bold shadow-lg";
 
 const getNodeSize = (label) => {
   const safeLabel = (label || '').replace(/\s+/g, '');
@@ -67,20 +74,8 @@ const getFurthestStage = (stages) => stages.reduce((furthest, stage) => (
 
 const getOutcomeColor = (stage) => OUTCOME_COLORS[getStageCategory(stage)] || OUTCOME_COLORS.default;
 
-const getStageClass = (stage) => {
-  const classesByCategory = {
-    rejected: "bg-red-900 text-red-200 border-2 border-red-700",
-    ghosted: "bg-stone-800 text-stone-300 border-2 border-stone-600 border-dashed",
-    accepted: "bg-blue-900 text-blue-200 border-2 border-blue-700",
-    offered: "bg-green-900 text-green-200 border-2 border-green-700",
-    applied: "bg-slate-800 text-slate-300 border-2 border-slate-600",
-    assessment: "bg-slate-800 text-slate-300 border-2 border-slate-600",
-    screening: "bg-slate-800 text-slate-300 border-2 border-slate-600",
-    interview: "bg-slate-800 text-slate-300 border-2 border-slate-600",
-    other: "bg-slate-800 text-slate-300 border-2 border-slate-600"
-  };
-  const baseClass = " rounded-full flex justify-center items-center text-[10px] font-bold shadow-lg text-center p-2";
-  return classesByCategory[getStageCategory(stage)] + baseClass;
+const getStageClass = () => {
+  return "bg-white text-slate-900 border-2 border-white rounded-full flex justify-center items-center text-[10px] font-bold shadow-lg text-center p-2";
 };
 
 const formatStageName = (stageInput) => {
@@ -107,6 +102,48 @@ const normalizeCsvHeader = (header) => header.trim().toLowerCase().replace(/[^a-
 const findCsvHeader = (headers, aliases) => {
   const normalizedAliases = new Set(aliases);
   return headers.find((header) => normalizedAliases.has(normalizeCsvHeader(header)));
+};
+
+const getNodeHandleId = (node, towardCenter, side, role) => {
+  const width = node.style?.width || 75;
+  const height = node.style?.height || 75;
+  const centerX = node.position.x + width / 2;
+  const centerY = node.position.y + height / 2;
+  const directionX = towardCenter.x - centerX;
+  const directionY = towardCenter.y - centerY;
+  const directionLength = Math.hypot(directionX, directionY) || 1;
+
+  const closestPosition = EDGE_HANDLE_POSITIONS.reduce((closest, position) => {
+    const x = side === 'right' ? 0.5 - position.x : position.x - 0.5;
+    const y = position.y - 0.5;
+    const score = (x * directionX + y * directionY) / directionLength;
+    return !closest || score > closest.score ? { id: position.id, score } : closest;
+  }, null);
+
+  return `${role}-${side}-${closestPosition.id}`;
+};
+
+const getEdgeHandles = (sourceNode, targetNode) => {
+  const sourceWidth = sourceNode.style?.width || 75;
+  const sourceHeight = sourceNode.style?.height || 75;
+  const targetWidth = targetNode.style?.width || 75;
+  const targetHeight = targetNode.style?.height || 75;
+  const sourceCenter = {
+    x: sourceNode.position.x + sourceWidth / 2,
+    y: sourceNode.position.y + sourceHeight / 2
+  };
+  const targetCenter = {
+    x: targetNode.position.x + targetWidth / 2,
+    y: targetNode.position.y + targetHeight / 2
+  };
+
+  const sourceSide = targetCenter.x >= sourceCenter.x ? 'right' : 'left';
+  const targetSide = sourceSide === 'right' ? 'left' : 'right';
+
+  return {
+    sourceHandle: getNodeHandleId(sourceNode, targetCenter, sourceSide, 'source'),
+    targetHandle: getNodeHandleId(targetNode, sourceCenter, targetSide, 'target')
+  };
 };
 
 export default function Room() {
@@ -335,12 +372,8 @@ function RoomContent({ roomId }) {
       // Calculate organic clusters instead of grids
       let companyLayoutBottom = 100;
       let hasCompanyLayoutRows = false;
-      const companyNodes = companyGroups.flatMap(([stage, companies]) => {
-
-        // Estimate the visual radius of the cluster so we can stack them cleanly
+      const companyNodes = companyGroups.flatMap(([, companies]) => {
         const clusterRadius = Math.max(120, Math.sqrt(companies.length) * 50);
-
-        // Find the central target Y for the entire cluster
         const targetY = hasCompanyLayoutRows ? companyLayoutBottom + clusterRadius + 50 : 100 + clusterRadius;
 
         const groupNodes = companies.map((name) => {
@@ -350,7 +383,7 @@ function RoomContent({ roomId }) {
           return {
             id: `company-${name}`,
             isCompany: true,
-            type: 'default',
+            type: 'dynamicCircle',
             sourcePosition: Position.Right,
             targetPosition: Position.Left,
             data: { label: name },
@@ -358,12 +391,11 @@ function RoomContent({ roomId }) {
             style: {
               borderRadius: '50%',
               width: size,
-              height: size,
-              borderColor: getOutcomeColor(stage)
+              height: size
             },
             radius: size / 2,
-            targetX: columnCompaniesX, // Everyone pulls to the same X 
-            targetY: targetY,          // Everyone pulls to the same center Y point
+            targetX: columnCompaniesX,
+            targetY: targetY,
             x: existingNode ? existingNode.x : columnCompaniesX + (Math.random() - 0.5) * GRAPH_SETTINGS.physics.initialJitter,
             y: existingNode ? existingNode.y : targetY + (Math.random() - 0.5) * GRAPH_SETTINGS.physics.initialJitter,
             fx: existingNode ? existingNode.fx : null,
@@ -384,7 +416,7 @@ function RoomContent({ roomId }) {
         const column = index % friendColumns;
         return {
           id: `friend-${name}`,
-          type: 'default',
+          type: 'dynamicCircle',
           sourcePosition: Position.Right,
           targetPosition: Position.Left,
           position: nodePositionsRef.current.get(`friend-${name}`) || {
@@ -405,7 +437,7 @@ function RoomContent({ roomId }) {
         return {
           id: `stage-${stage}`,
           isCompany: false,
-          type: 'default',
+          type: 'dynamicCircle',
           sourcePosition: Position.Right,
           targetPosition: Position.Left,
           data: { label: stage },
@@ -422,6 +454,18 @@ function RoomContent({ roomId }) {
       });
 
       d3NodesRef.current = [...stageNodes, ...companyNodes];
+
+      const nodeGeometryById = new Map([
+        ...friendNodes,
+        ...stageNodes.map((node) => ({
+          ...node,
+          position: { x: node.x, y: node.y }
+        })),
+        ...companyNodes.map((node) => ({
+          ...node,
+          position: { x: node.x, y: node.y }
+        }))
+      ].map((node) => [node.id, node]));
 
       const newEdges = [];
       allData.forEach((row, index) => {
@@ -484,7 +528,13 @@ function RoomContent({ roomId }) {
         });
       });
 
-      setEdges(newEdges);
+      setEdges(newEdges.map((edge) => {
+        const sourceNode = nodeGeometryById.get(edge.source);
+        const targetNode = nodeGeometryById.get(edge.target);
+        return sourceNode && targetNode
+          ? { ...edge, ...getEdgeHandles(sourceNode, targetNode) }
+          : edge;
+      }));
 
       if (simulationRef.current) simulationRef.current.stop();
 
@@ -492,7 +542,11 @@ function RoomContent({ roomId }) {
         .force('collide', forceCollide(d => (d.radius || 55) + GRAPH_SETTINGS.physics.collisionRadiusOffset).strength(GRAPH_SETTINGS.physics.collisionStrength))
         .force('x', forceX(d => d.targetX).strength(d => d.isCompany ? GRAPH_SETTINGS.physics.xGravityCompany : GRAPH_SETTINGS.physics.xGravityStage))
         .force('y', forceY(d => d.targetY).strength(d => d.isCompany ? GRAPH_SETTINGS.physics.yGravityCompany : GRAPH_SETTINGS.physics.yGravityStage))
-        .force('charge', forceManyBody().strength(GRAPH_SETTINGS.physics.repulsionStrength));
+        .force('charge', forceManyBody().strength(d => (
+          d.isCompany
+            ? GRAPH_SETTINGS.physics.repulsionStrengthCompany
+            : GRAPH_SETTINGS.physics.repulsionStrengthStage
+        )));
 
       simulationRef.current.on('tick', () => {
         const positionedSimNodes = d3NodesRef.current.map((node) => ({

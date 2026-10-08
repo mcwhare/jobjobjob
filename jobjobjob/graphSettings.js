@@ -9,7 +9,8 @@ export const GRAPH_SETTINGS = {
   physics: {
     collisionRadiusOffset: 10, // Extra invisible padding around nodes to prevent overlap
     collisionStrength: 1.2,    // How aggressively nodes push each other apart when overlapping (0 to 1+)
-    repulsionStrength: -400,   // General magnetic repulsion between all nodes (negative = push apart)
+    repulsionStrengthStage: -400,   // Stage-node repulsion (negative = push apart)
+    repulsionStrengthCompany: -1600, // Company-node repulsion (negative = push apart)
     
     // Gravity settings (how strongly nodes are pulled to their target X/Y coordinates)
     xGravityStage: 0.18,       
