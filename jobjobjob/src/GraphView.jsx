@@ -175,7 +175,7 @@ export default function GraphView({
             aria-label="Edge color legend"
             className="absolute bottom-3 right-3 z-10 rounded-lg border border-slate-700 bg-slate-900/95 p-3 text-xs text-slate-200 shadow-xl sm:bottom-4 sm:right-4"
           >
-            <h2 className="mb-2 text-xs font-semibold text-white">Edge colors</h2>
+            <h3 className="mb-2 text-xs font-semibold text-white">Edge colors</h3>
             <ul className="grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-1">
               {visibleLegendItems.map(({ color, label }) => (
                 <li key={color} className="flex items-center gap-2">
