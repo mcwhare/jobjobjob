@@ -12,6 +12,10 @@ export const GRAPH_SETTINGS = {
   physics: {
     collisionRadiusOffset: 10, // Extra invisible padding around nodes to prevent overlap
     collisionStrength: 1.2,    // How aggressively nodes push each other apart when overlapping (0 to 1+)
+    settledAlphaThreshold: 0.2,
+    settledVelocityThreshold: 0.2,
+    settledTicksBeforeFastCooling: 20,
+    settledAlphaDecay: 0.08,
     repulsionStrengthStage: -400,   // Stage-node repulsion (negative = push apart)
     repulsionStrengthCompany: -1600, // Company-node repulsion (negative = push apart)
     stageCompanyAttractionStrength: 0.04,

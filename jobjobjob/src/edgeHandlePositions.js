@@ -1,4 +1,4 @@
-const HANDLE_VERTICAL_OFFSETS = Array.from({ length: 17 }, (_, index) => -0.8 + index * 0.1);
+const HANDLE_VERTICAL_OFFSETS = Array.from({ length: 9 }, (_, index) => -0.8 + index * 0.2);
 
 export const EDGE_HANDLE_POSITIONS = HANDLE_VERTICAL_OFFSETS.map((verticalOffset, index) => {
   const horizontalOffset = Math.sqrt(1 - verticalOffset ** 2);

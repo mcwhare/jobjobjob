@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react';
-import ReactFlow, { Background, Controls, Handle, Position, useReactFlow, ReactFlowProvider, BaseEdge } from 'reactflow';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import ReactFlow, { applyNodeChanges, Background, Controls, Handle, Position, useReactFlow, ReactFlowProvider, BaseEdge } from 'reactflow';
 import 'reactflow/dist/style.css';
 
+import { forceSimulation, forceY, forceX, forceManyBody, forceCollide, forceLink } from 'd3-force';
 import { GRAPH_SETTINGS } from '../graphSettings';
 import { EDGE_HANDLE_POSITIONS } from './edgeHandlePositions';
+import { buildRoomGraph, updateEdgeHandles } from './graphBuilder';
 
 // Custom edge that bows outwards when multiple edges share the same start and end points
 function MultiEdge({ sourceX, sourceY, targetX, targetY, style, markerEnd, data }) {
@@ -31,6 +33,7 @@ function MultiEdge({ sourceX, sourceY, targetX, targetY, style, markerEnd, data 
 }
 
 const edgeTypes = { multi: MultiEdge };
+const SIMULATION_RENDER_INTERVAL_MS = 1000 / 30;
 
 function DynamicCircleNode({ data, isConnectable }) {
   const getHandleStyle = (point) => ({
@@ -105,20 +108,165 @@ function AutoFitView({ nodes }) {
   return null; 
 }
 
-export default function GraphView({
-  nodes,
-  edges,
-  onNodesChange,
-  onNodeDragStart,
-  onNodeDrag,
-  onNodeDragStop,
+function GraphView({
+  applicationsData,
   onDeleteFriend,
   isPanEnabled,
   onPanEnabledChange,
 }) {
+  const [nodes, setNodes] = useState([]);
+  const [edges, setEdges] = useState([]);
   const [contextMenu, setContextMenu] = useState(null);
-  const displayedEdgeColors = new Set(edges.map((edge) => edge.style?.stroke?.toLowerCase()));
-  const visibleLegendItems = EDGE_LEGEND_ITEMS.filter(({ color }) => displayedEdgeColors.has(color));
+  const simulationRef = useRef(null);
+  const d3NodesRef = useRef([]);
+  const nodePositionsRef = useRef(new Map());
+  const initialAlphaDecayRef = useRef(null);
+  const settledTicksRef = useRef(0);
+  const visibleLegendItems = useMemo(() => {
+    const displayedEdgeColors = new Set(edges.map((edge) => edge.style?.stroke?.toLowerCase()));
+    return EDGE_LEGEND_ITEMS.filter(({ color }) => displayedEdgeColors.has(color));
+  }, [edges]);
+
+  const onNodesChange = useCallback(
+    (changes) => setNodes((currentNodes) => applyNodeChanges(changes, currentNodes)),
+    []
+  );
+
+  const onNodeDragStart = useCallback((event, node) => {
+    if (!simulationRef.current || (!node.id.startsWith('stage-') && !node.id.startsWith('company-'))) return;
+    if (initialAlphaDecayRef.current !== null) {
+      simulationRef.current.alphaDecay(initialAlphaDecayRef.current);
+    }
+    settledTicksRef.current = 0;
+    simulationRef.current.alphaTarget(0.3).restart();
+    const d3Node = d3NodesRef.current.find((simulationNode) => simulationNode.id === node.id);
+    if (d3Node) {
+      d3Node.fx = node.position.x;
+      d3Node.fy = node.position.y;
+    }
+  }, []);
+
+  const onNodeDrag = useCallback((event, node) => {
+    nodePositionsRef.current.set(node.id, node.position);
+    if (!simulationRef.current || (!node.id.startsWith('stage-') && !node.id.startsWith('company-'))) return;
+    const d3Node = d3NodesRef.current.find((simulationNode) => simulationNode.id === node.id);
+    if (d3Node) {
+      d3Node.fx = node.position.x;
+      d3Node.fy = node.position.y;
+    }
+  }, []);
+
+  const onNodeDragStop = useCallback((event, node) => {
+    nodePositionsRef.current.set(node.id, node.position);
+    if (!simulationRef.current || (!node.id.startsWith('stage-') && !node.id.startsWith('company-'))) return;
+    simulationRef.current.alphaTarget(0);
+    const d3Node = d3NodesRef.current.find((simulationNode) => simulationNode.id === node.id);
+    if (d3Node) {
+      d3Node.fx = null;
+      d3Node.fy = null;
+    }
+  }, []);
+
+  const handleDeleteFriend = useCallback(async (node) => {
+    const deleted = await onDeleteFriend(node);
+    if (deleted) nodePositionsRef.current.delete(node.id);
+  }, [onDeleteFriend]);
+
+  useEffect(() => {
+    if (applicationsData.length === 0) {
+      d3NodesRef.current = [];
+      setNodes([]);
+      setEdges([]);
+      return undefined;
+    }
+
+    const { friendNodes, simulationNodes, edges: graphEdges, attractionLinks } = buildRoomGraph(
+      applicationsData,
+      d3NodesRef.current,
+      nodePositionsRef.current
+    );
+    d3NodesRef.current = simulationNodes;
+    setEdges(graphEdges);
+
+    const simulation = forceSimulation(simulationNodes)
+      .force('collide', forceCollide(d => (d.radius || 55) + GRAPH_SETTINGS.physics.collisionRadiusOffset).strength(GRAPH_SETTINGS.physics.collisionStrength))
+      .force('x', forceX(d => d.targetX).strength(d => d.isCompany ? GRAPH_SETTINGS.physics.xGravityCompany : GRAPH_SETTINGS.physics.xGravityStage))
+      .force('y', forceY(d => d.targetY).strength(d => d.isCompany ? GRAPH_SETTINGS.physics.yGravityCompany : GRAPH_SETTINGS.physics.yGravityStage))
+      .force('charge', forceManyBody().strength(d => (
+        d.isCompany
+          ? GRAPH_SETTINGS.physics.repulsionStrengthCompany
+          : GRAPH_SETTINGS.physics.repulsionStrengthStage
+      )))
+      .force('stage-company-attraction', forceLink(attractionLinks)
+        .id(node => node.id)
+        .distance(link => Math.hypot(
+          link.source.targetX - link.target.targetX,
+          link.source.targetY - link.target.targetY
+        ))
+        .strength(GRAPH_SETTINGS.physics.stageCompanyAttractionStrength));
+
+    simulationRef.current = simulation;
+    initialAlphaDecayRef.current = simulation.alphaDecay();
+    settledTicksRef.current = 0;
+    let lastRenderTime = -Infinity;
+    const renderSimulationState = () => {
+      const positionedSimNodes = simulationNodes.map((node) => {
+        return {
+          id: node.id,
+          position: { x: node.x, y: node.y },
+          data: node.data,
+          className: node.className,
+          style: node.style,
+          sourcePosition: node.sourcePosition,
+          targetPosition: node.targetPosition,
+          type: node.type
+        };
+      });
+
+      const positionedFriendNodes = friendNodes.map((node) => ({
+        ...node,
+        position: nodePositionsRef.current.get(node.id) || node.position
+      }));
+
+      const currentNodes = [...positionedFriendNodes, ...positionedSimNodes];
+      setNodes(currentNodes);
+      setEdges((currentEdges) => updateEdgeHandles(currentEdges, currentNodes));
+    };
+
+    simulation.on('tick', () => {
+      const maxVelocity = simulationNodes.reduce(
+        (maximum, node) => Math.max(maximum, Math.hypot(node.vx, node.vy)),
+        0
+      );
+      if (
+        simulation.alpha() <= GRAPH_SETTINGS.physics.settledAlphaThreshold
+        && maxVelocity <= GRAPH_SETTINGS.physics.settledVelocityThreshold
+      ) {
+        settledTicksRef.current += 1;
+        if (
+          settledTicksRef.current >= GRAPH_SETTINGS.physics.settledTicksBeforeFastCooling
+          && simulation.alphaDecay() < GRAPH_SETTINGS.physics.settledAlphaDecay
+        ) {
+          simulation.alphaDecay(GRAPH_SETTINGS.physics.settledAlphaDecay);
+        }
+      } else {
+        settledTicksRef.current = 0;
+      }
+
+      const now = performance.now();
+      if (now - lastRenderTime < SIMULATION_RENDER_INTERVAL_MS) return;
+      lastRenderTime = now;
+      renderSimulationState();
+    });
+    simulation.on('end', renderSimulationState);
+
+    return () => {
+      simulation.stop();
+      if (simulationRef.current === simulation) simulationRef.current = null;
+      initialAlphaDecayRef.current = null;
+      settledTicksRef.current = 0;
+    };
+  }, [applicationsData]);
 
   return (
     <div className="w-full h-full bg-slate-950">
@@ -196,7 +344,7 @@ export default function GraphView({
               type="button"
               className="w-full rounded px-3 py-2 text-left text-sm text-red-300 hover:bg-slate-700"
               onClick={() => {
-                onDeleteFriend(contextMenu.node);
+                handleDeleteFriend(contextMenu.node);
                 setContextMenu(null);
               }}
             >
@@ -208,3 +356,5 @@ export default function GraphView({
     </div>
   );
 }
+
+export default memo(GraphView);

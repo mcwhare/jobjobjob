@@ -1,15 +1,11 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import Papa from 'papaparse';
-import { applyNodeChanges } from 'reactflow';
 import GraphView from './GraphView';
 import TutorialArrows from './TutorialArrows';
-import { buildRoomGraph, updateEdgeHandles } from './graphBuilder';
 
 import { db } from '../firebaseConfig';
 import { collection, deleteDoc, doc, onSnapshot, writeBatch } from 'firebase/firestore';
-import { forceSimulation, forceY, forceX, forceManyBody, forceCollide, forceLink } from 'd3-force';
-import { GRAPH_SETTINGS } from '../graphSettings';
 import logoImage from './assets/jjj logo trans.svg';
 import tutorialOne from './assets/tutorial1.png';
 import tutorialTwo from './assets/tutorial2.png';
@@ -63,8 +59,6 @@ export default function Room() {
 function RoomContent({ roomId }) {
   const navigate = useNavigate();
   const isExampleRoom = roomId === 'example';
-  const [nodes, setNodes] = useState([]);
-  const [edges, setEdges] = useState([]);
   const [applicationsData, setApplicationsData] = useState([]);
 
   const [activeTooltip, setActiveTooltip] = useState(null);
@@ -121,10 +115,6 @@ function RoomContent({ roomId }) {
     }
   }, [dismissedTutorialTargets]);
 
-  const simulationRef = useRef(null);
-  const d3NodesRef = useRef([]);
-  const nodePositionsRef = useRef(new Map());
-
   const handleUploaderNameChange = (event) => {
     const name = event.target.value;
     setUploaderName(name);
@@ -147,48 +137,13 @@ function RoomContent({ roomId }) {
 
     try {
       await deleteDoc(doc(db, 'rooms', roomId, 'friends', friendName));
-      nodePositionsRef.current.delete(node.id);
+      return true;
     } catch (error) {
       console.error(`Could not delete ${friendName}'s room entries.`, error);
       alert(`Could not delete ${friendName}'s entries. Please try again.`);
+      return false;
     }
   }, [isExampleRoom, roomId]);
-
-  const onNodesChange = useCallback(
-    (changes) => setNodes((nds) => applyNodeChanges(changes, nds)),
-    []
-  );
-
-  const onNodeDragStart = useCallback((event, node) => {
-    if (!simulationRef.current || (!node.id.startsWith('stage-') && !node.id.startsWith('company-'))) return;
-    simulationRef.current.alphaTarget(0.3).restart();
-    const d3Node = d3NodesRef.current.find(n => n.id === node.id);
-    if (d3Node) {
-      d3Node.fx = node.position.x;
-      d3Node.fy = node.position.y;
-    }
-  }, []);
-
-  const onNodeDrag = useCallback((event, node) => {
-    nodePositionsRef.current.set(node.id, node.position);
-    if (!simulationRef.current || (!node.id.startsWith('stage-') && !node.id.startsWith('company-'))) return;
-    const d3Node = d3NodesRef.current.find(n => n.id === node.id);
-    if (d3Node) {
-      d3Node.fx = node.position.x;
-      d3Node.fy = node.position.y;
-    }
-  }, []);
-
-  const onNodeDragStop = useCallback((event, node) => {
-    nodePositionsRef.current.set(node.id, node.position);
-    if (!simulationRef.current || (!node.id.startsWith('stage-') && !node.id.startsWith('company-'))) return;
-    simulationRef.current.alphaTarget(0);
-    const d3Node = d3NodesRef.current.find(n => n.id === node.id);
-    if (d3Node) {
-      d3Node.fx = null;
-      d3Node.fy = null;
-    }
-  }, []);
 
   useEffect(() => {
     const friendsRef = collection(db, 'rooms', roomId, 'friends');
@@ -200,66 +155,6 @@ function RoomContent({ roomId }) {
       });
 
       setApplicationsData(allData);
-
-      if (allData.length === 0) {
-        setNodes([]);
-        setEdges([]);
-        return;
-      }
-
-      const { friendNodes, simulationNodes, edges: graphEdges, attractionLinks } = buildRoomGraph(
-        allData,
-        d3NodesRef.current,
-        nodePositionsRef.current
-      );
-      d3NodesRef.current = simulationNodes;
-      setEdges(graphEdges);
-      if (simulationRef.current) simulationRef.current.stop();
-
-      simulationRef.current = forceSimulation(d3NodesRef.current)
-        .force('collide', forceCollide(d => (d.radius || 55) + GRAPH_SETTINGS.physics.collisionRadiusOffset).strength(GRAPH_SETTINGS.physics.collisionStrength))
-        .force('x', forceX(d => d.targetX).strength(d => d.isCompany ? GRAPH_SETTINGS.physics.xGravityCompany : GRAPH_SETTINGS.physics.xGravityStage))
-        .force('y', forceY(d => d.targetY).strength(d => d.isCompany ? GRAPH_SETTINGS.physics.yGravityCompany : GRAPH_SETTINGS.physics.yGravityStage))
-        .force('charge', forceManyBody().strength(d => (
-          d.isCompany
-            ? GRAPH_SETTINGS.physics.repulsionStrengthCompany
-            : GRAPH_SETTINGS.physics.repulsionStrengthStage
-        )))
-        .force('stage-company-attraction', forceLink(attractionLinks)
-          .id(node => node.id)
-          .distance(link => Math.hypot(
-            link.source.targetX - link.target.targetX,
-            link.source.targetY - link.target.targetY
-          ))
-          .strength(GRAPH_SETTINGS.physics.stageCompanyAttractionStrength));
-
-      simulationRef.current.on('tick', () => {
-        const positionedSimNodes = d3NodesRef.current.map((node) => ({
-          id: node.id,
-          position: { x: node.x, y: node.y },
-          data: node.data,
-          className: node.className,
-          style: node.style,
-          sourcePosition: node.sourcePosition,
-          targetPosition: node.targetPosition,
-          type: node.type
-        }));
-
-        const preserveDraggedPositions = (sideNodes) => sideNodes.map((node) => ({
-          ...node,
-          position: nodePositionsRef.current.get(node.id) || node.position
-        }));
-
-        const currentNodes = [
-          ...preserveDraggedPositions(friendNodes),
-          ...positionedSimNodes
-        ];
-        setNodes(currentNodes);
-        setEdges((currentEdges) => {
-          return updateEdgeHandles(currentEdges, currentNodes);
-        });
-      });
-
     });
 
     return () => unsubscribe();
@@ -475,12 +370,7 @@ function RoomContent({ roomId }) {
 
       <div className="flex-1 w-full relative">
         <GraphView
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onNodeDragStart={onNodeDragStart}
-          onNodeDrag={onNodeDrag}
-          onNodeDragStop={onNodeDragStop}
+          applicationsData={applicationsData}
           onDeleteFriend={handleDeleteFriend}
           isPanEnabled={isPanEnabled}
           onPanEnabledChange={setIsPanEnabled}
