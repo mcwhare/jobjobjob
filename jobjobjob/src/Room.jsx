@@ -2,7 +2,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import Papa from 'papaparse';
 import GraphView from './GraphView';
+import GraphSettingsDrawer from './GraphSettingsDrawer';
 import TutorialArrows from './TutorialArrows';
+import { GRAPH_SETTINGS } from '../graphSettings';
 
 import { db } from '../firebaseConfig';
 import { collection, deleteDoc, doc, onSnapshot, writeBatch } from 'firebase/firestore';
@@ -79,7 +81,9 @@ function RoomContent({ roomId }) {
   const [isPanEnabled, setIsPanEnabled] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isBreakdownOpen, setIsBreakdownOpen] = useState(false);
-  const [isOverviewCollapsed, setIsOverviewCollapsed] = useState(false);
+  const [isOverviewCollapsed, setIsOverviewCollapsed] = useState(true);
+  const [graphSettings, setGraphSettings] = useState(() => JSON.parse(JSON.stringify(GRAPH_SETTINGS)));
+  const [animatedEdges, setAnimatedEdges] = useState(true);
 
   const [hasCopied, setHasCopied] = useState(false);
 
@@ -88,6 +92,22 @@ function RoomContent({ roomId }) {
     setHasCopied(true);
     setTimeout(() => setHasCopied(false), 2000);
   };
+
+  const handleGraphSettingChange = useCallback((path, value) => {
+    const [section, setting] = path;
+    setGraphSettings(current => ({
+      ...current,
+      [section]: {
+        ...current[section],
+        [setting]: value
+      }
+    }));
+  }, []);
+
+  const resetGraphSettings = useCallback(() => {
+    setGraphSettings(JSON.parse(JSON.stringify(GRAPH_SETTINGS)));
+    setAnimatedEdges(true);
+  }, []);
 
   const [dismissedTutorialTargets, setDismissedTutorialTargets] = useState(() => {
     try {
@@ -374,6 +394,15 @@ function RoomContent({ roomId }) {
           onDeleteFriend={handleDeleteFriend}
           isPanEnabled={isPanEnabled}
           onPanEnabledChange={setIsPanEnabled}
+          graphSettings={graphSettings}
+          animatedEdges={animatedEdges}
+        />
+        <GraphSettingsDrawer
+          settings={graphSettings}
+          onSettingChange={handleGraphSettingChange}
+          animatedEdges={animatedEdges}
+          onAnimatedEdgesChange={setAnimatedEdges}
+          onReset={resetGraphSettings}
         />
 
         {/* Top-Right Popup Panel / Room Overview */}

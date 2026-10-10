@@ -24,9 +24,14 @@ const OUTCOME_COLORS = {
 
 const circleNodeClass = 'bg-white text-slate-900 border-2 border-white rounded-full flex justify-center items-center font-bold shadow-lg';
 
-const getNodeSize = (label) => {
-  const safeLabel = (label || '').replace(/\s+/g, '');
-  return Math.max(82, Math.min(180, 72 + safeLabel.length * GRAPH_SETTINGS.nodes.fontSize * 0.5));
+export const getNodeSize = (label, fontSize) => {
+  const words = (label || '').trim().split(/\s+/).filter(Boolean);
+  const longestWordLength = words.reduce((widest, word) => Math.max(widest, word.length), 0);
+  const widthPadding = 26;
+  const heightPadding = Math.max(18, fontSize * 0.75);
+  const textWidth = longestWordLength * fontSize * 0.72;
+  const textHeight = Math.max(1, words.length) * fontSize * 1.05;
+  return Math.max(82, textWidth + widthPadding, textHeight + heightPadding);
 };
 
 const getStageCategory = (stage) => {
@@ -66,7 +71,7 @@ const getFurthestStage = (stages) => stages.reduce((furthest, stage) => (
 const getOutcomeColor = (stage) => OUTCOME_COLORS[getStageCategory(stage)] || OUTCOME_COLORS.default;
 
 const getStageClass = () => (
-  'bg-white text-slate-900 border-2 border-white rounded-full flex justify-center items-center font-bold shadow-lg text-center p-2'
+  'bg-white text-slate-900 border-2 border-white rounded-full flex justify-center items-center font-bold shadow-lg text-center'
 );
 
 const getEdgeHandles = (sourceNode, targetNode) => {
@@ -139,7 +144,28 @@ export function formatStageName(stageInput) {
   return `${trimmedStage.charAt(0).toUpperCase()}${trimmedStage.slice(1)}`;
 }
 
-export function buildRoomGraph(allData, previousSimulationNodes, savedPositions) {
+export function updateNodeFontSize(nodes, fontSize) {
+  return nodes.map((node) => {
+    const label = node.data?.label || '';
+    const size = getNodeSize(label, fontSize);
+    return {
+      ...node,
+      data: {
+        ...node.data,
+        displayLabel: label.trim().split(/\s+/).filter(Boolean).join('\n')
+      },
+      style: {
+        ...node.style,
+        width: size,
+        height: size,
+        fontSize
+      },
+      ...(node.radius !== undefined ? { radius: size / 2 } : {})
+    };
+  });
+}
+
+export function buildRoomGraph(allData, previousSimulationNodes, savedPositions, settings = GRAPH_SETTINGS) {
   const uniqueFriends = [...new Set(allData.map(row => row.Friend))].filter(Boolean);
   const uniqueCompanies = [...new Set(allData.map(row => row.Company))].filter(Boolean);
   const allStages = allData.flatMap(row => (
@@ -210,14 +236,14 @@ export function buildRoomGraph(allData, previousSimulationNodes, savedPositions)
     .sort(([stageA], [stageB]) => getCompanyGroupOrder(stageA) - getCompanyGroupOrder(stageB));
 
   const centerX = 600;
-  const dynamicSpread = GRAPH_SETTINGS.layout.baseSpread
-    + ((Math.max(1, orderedStages.length) - 1) * GRAPH_SETTINGS.layout.stageSpacing) / 2;
+  const dynamicSpread = settings.layout.baseSpread
+    + ((Math.max(1, orderedStages.length) - 1) * settings.layout.stageSpacing) / 2;
   const columnFriendsX = centerX - dynamicSpread;
   const columnCompaniesX = centerX + dynamicSpread;
   const friendColumns = Math.max(1, Math.ceil(Math.sqrt(uniqueFriends.length)));
   const friendRows = Math.ceil(uniqueFriends.length / friendColumns);
   const friendLayoutBottom = 100
-    + Math.max(0, friendRows - 1) * GRAPH_SETTINGS.layout.endpointGridSpacing;
+    + Math.max(0, friendRows - 1) * settings.layout.endpointGridSpacing;
 
   let companyLayoutBottom = 100;
   let hasCompanyLayoutRows = false;
@@ -228,25 +254,25 @@ export function buildRoomGraph(allData, previousSimulationNodes, savedPositions)
       : 100 + clusterRadius;
     const groupNodes = companies.map((name) => {
       const existingNode = previousSimulationNodes.find(node => node.id === `company-${name}`);
-      const size = getNodeSize(name);
+      const size = getNodeSize(name, settings.nodes.fontSize);
       return {
         id: `company-${name}`,
         isCompany: true,
         type: 'dynamicCircle',
         sourcePosition: Position.Right,
         targetPosition: Position.Left,
-        data: { label: name },
+        data: { label: name, displayLabel: name.trim().split(/\s+/).join('\n') },
         className: circleNodeClass,
-        style: { borderRadius: '50%', width: size, height: size, fontSize: GRAPH_SETTINGS.nodes.fontSize },
+        style: { borderRadius: '50%', width: size, height: size, fontSize: settings.nodes.fontSize },
         radius: size / 2,
         targetX: columnCompaniesX,
         targetY,
         x: existingNode
           ? existingNode.x
-          : columnCompaniesX + (Math.random() - 0.5) * GRAPH_SETTINGS.physics.initialJitter,
+          : columnCompaniesX + (Math.random() - 0.5) * settings.physics.initialJitter,
         y: existingNode
           ? existingNode.y
-          : targetY + (Math.random() - 0.5) * GRAPH_SETTINGS.physics.initialJitter,
+          : targetY + (Math.random() - 0.5) * settings.physics.initialJitter,
         fx: existingNode?.fx ?? null,
         fy: existingNode?.fy ?? null
       };
@@ -258,7 +284,7 @@ export function buildRoomGraph(allData, previousSimulationNodes, savedPositions)
 
   const centerY = Math.max(400, (100 + Math.max(friendLayoutBottom, companyLayoutBottom)) / 2);
   const friendNodes = uniqueFriends.map((name, index) => {
-    const size = getNodeSize(name);
+    const size = getNodeSize(name, settings.nodes.fontSize);
     const row = Math.floor(index / friendColumns);
     const column = index % friendColumns;
     return {
@@ -267,38 +293,38 @@ export function buildRoomGraph(allData, previousSimulationNodes, savedPositions)
       sourcePosition: Position.Right,
       targetPosition: Position.Left,
       position: savedPositions.get(`friend-${name}`) || {
-        x: columnFriendsX - column * GRAPH_SETTINGS.layout.endpointGridSpacing,
-        y: 100 + row * GRAPH_SETTINGS.layout.endpointGridSpacing
+        x: columnFriendsX - column * settings.layout.endpointGridSpacing,
+        y: 100 + row * settings.layout.endpointGridSpacing
       },
-      data: { label: name },
+      data: { label: name, displayLabel: name.trim().split(/\s+/).filter(Boolean).join('\n') },
       className: circleNodeClass,
-      style: { borderRadius: '50%', width: size, height: size, fontSize: GRAPH_SETTINGS.nodes.fontSize }
+      style: { borderRadius: '50%', width: size, height: size, fontSize: settings.nodes.fontSize }
     };
   });
 
   const stageNodes = orderedStages.map((stage, index) => {
     const existingNode = previousSimulationNodes.find(node => node.id === `stage-${stage}`);
-    const size = getNodeSize(stage);
+    const size = getNodeSize(stage, settings.nodes.fontSize);
     const targetX = centerX + (index - (orderedStages.length - 1) / 2)
-      * GRAPH_SETTINGS.layout.stageSpacing;
+      * settings.layout.stageSpacing;
     return {
       id: `stage-${stage}`,
       isCompany: false,
       type: 'dynamicCircle',
       sourcePosition: Position.Right,
       targetPosition: Position.Left,
-      data: { label: stage },
+      data: { label: stage, displayLabel: stage.trim().split(/\s+/).filter(Boolean).join('\n') },
       className: getStageClass(),
-      style: { borderRadius: '50%', width: size, height: size, fontSize: GRAPH_SETTINGS.nodes.fontSize },
+      style: { borderRadius: '50%', width: size, height: size, fontSize: settings.nodes.fontSize },
       radius: size / 2,
       targetX,
       targetY: centerY,
       x: existingNode
         ? existingNode.x
-        : targetX + (Math.random() - 0.5) * GRAPH_SETTINGS.physics.initialJitter,
+        : targetX + (Math.random() - 0.5) * settings.physics.initialJitter,
       y: existingNode
         ? existingNode.y
-        : centerY + (Math.random() - 0.5) * GRAPH_SETTINGS.physics.initialJitter,
+        : centerY + (Math.random() - 0.5) * settings.physics.initialJitter,
       fx: existingNode?.fx ?? null,
       fy: existingNode?.fy ?? null
     };

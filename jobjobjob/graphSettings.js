@@ -15,9 +15,9 @@ export const GRAPH_SETTINGS = {
     settledAlphaThreshold: 0.2,
     settledVelocityThreshold: 0.2,
     settledTicksBeforeFastCooling: 20,
-    settledAlphaDecay: 0.08,
+    settledAlphaDecay: 0.4,
     repulsionStrengthStage: -400,   // Stage-node repulsion (negative = push apart)
-    repulsionStrengthCompany: -1600, // Company-node repulsion (negative = push apart)
+    repulsionStrengthCompany: -2000, // Company-node repulsion (negative = push apart)
     stageCompanyAttractionStrength: 0.04,
     
     // Gravity settings (how strongly nodes are pulled to their target X/Y coordinates)

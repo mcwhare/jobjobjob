@@ -5,7 +5,7 @@ import 'reactflow/dist/style.css';
 import { forceSimulation, forceY, forceX, forceManyBody, forceCollide, forceLink } from 'd3-force';
 import { GRAPH_SETTINGS } from '../graphSettings';
 import { EDGE_HANDLE_POSITIONS } from './edgeHandlePositions';
-import { buildRoomGraph, updateEdgeHandles } from './graphBuilder';
+import { buildRoomGraph, getNodeSize, updateEdgeHandles, updateNodeFontSize } from './graphBuilder';
 
 // Custom edge that bows outwards when multiple edges share the same start and end points
 function MultiEdge({ sourceX, sourceY, targetX, targetY, style, markerEnd, data }) {
@@ -13,7 +13,9 @@ function MultiEdge({ sourceX, sourceY, targetX, targetY, style, markerEnd, data 
   const totalEdges = data?.totalEdges || 1;
   
   // Uses the new customizable edge separation setting
-  const shift = (offsetIndex - (totalEdges - 1) / 2) * GRAPH_SETTINGS.edges.multiEdgeSeparation; 
+  const edgeSeparation = data?.edgeSeparation
+    ?? GRAPH_SETTINGS.edges.multiEdgeSeparation;
+  const shift = (offsetIndex - (totalEdges - 1) / 2) * edgeSeparation;
   
   const deltaX = targetX - sourceX;
   const deltaY = targetY - sourceY;
@@ -79,7 +81,32 @@ function DynamicCircleNode({ data, isConnectable }) {
           style={getHandleStyle(right)}
         />
       ])}
-      {data.label}
+      <div
+        className="nodrag nopan"
+        style={{
+          display: 'flex',
+          width: '100%',
+          height: '100%',
+          alignItems: 'center',
+          justifyContent: 'center',
+          boxSizing: 'border-box'
+        }}
+      >
+        <span
+          style={{
+            display: 'block',
+            width: '100%',
+            padding: '0 12px',
+            boxSizing: 'border-box',
+            whiteSpace: 'pre-line',
+            textAlign: 'center',
+            lineHeight: 1.2,
+            wordBreak: 'normal'
+          }}
+        >
+          {data.displayLabel || data.label}
+        </span>
+      </div>
     </>
   );
 }
@@ -113,10 +140,25 @@ function GraphView({
   onDeleteFriend,
   isPanEnabled,
   onPanEnabledChange,
+  graphSettings,
+  animatedEdges,
 }) {
   const [nodes, setNodes] = useState([]);
   const [edges, setEdges] = useState([]);
+  const renderedNodes = useMemo(
+    () => updateNodeFontSize(nodes, graphSettings.nodes.fontSize),
+    [nodes, graphSettings.nodes.fontSize]
+  );
+  const renderedEdges = useMemo(() => updateEdgeHandles(edges, renderedNodes).map(edge => ({
+    ...edge,
+    animated: animatedEdges,
+    data: {
+      ...edge.data,
+      edgeSeparation: graphSettings.edges.multiEdgeSeparation
+    }
+  }  )), [edges, renderedNodes, animatedEdges, graphSettings.edges.multiEdgeSeparation]);
   const [contextMenu, setContextMenu] = useState(null);
+  const graphSettingsRef = useRef(graphSettings);
   const simulationRef = useRef(null);
   const d3NodesRef = useRef([]);
   const nodePositionsRef = useRef(new Map());
@@ -173,6 +215,23 @@ function GraphView({
   }, [onDeleteFriend]);
 
   useEffect(() => {
+    graphSettingsRef.current = graphSettings;
+  }, [graphSettings]);
+
+  useEffect(() => {
+    const collisionForce = simulationRef.current?.force('collide');
+    if (collisionForce) {
+      collisionForce.radius(node => (
+        getNodeSize(node.data?.label, graphSettings.nodes.fontSize) / 2
+        + graphSettings.physics.collisionRadiusOffset
+      ));
+    }
+  }, [
+    graphSettings.nodes.fontSize,
+    graphSettings.physics.collisionRadiusOffset
+  ]);
+
+  useEffect(() => {
     if (applicationsData.length === 0) {
       d3NodesRef.current = [];
       setNodes([]);
@@ -183,19 +242,20 @@ function GraphView({
     const { friendNodes, simulationNodes, edges: graphEdges, attractionLinks } = buildRoomGraph(
       applicationsData,
       d3NodesRef.current,
-      nodePositionsRef.current
+      nodePositionsRef.current,
+      graphSettingsRef.current
     );
     d3NodesRef.current = simulationNodes;
     setEdges(graphEdges);
 
     const simulation = forceSimulation(simulationNodes)
-      .force('collide', forceCollide(d => (d.radius || 55) + GRAPH_SETTINGS.physics.collisionRadiusOffset).strength(GRAPH_SETTINGS.physics.collisionStrength))
-      .force('x', forceX(d => d.targetX).strength(d => d.isCompany ? GRAPH_SETTINGS.physics.xGravityCompany : GRAPH_SETTINGS.physics.xGravityStage))
-      .force('y', forceY(d => d.targetY).strength(d => d.isCompany ? GRAPH_SETTINGS.physics.yGravityCompany : GRAPH_SETTINGS.physics.yGravityStage))
+      .force('collide', forceCollide(d => (d.radius || 55) + graphSettings.physics.collisionRadiusOffset).strength(graphSettings.physics.collisionStrength))
+      .force('x', forceX(d => d.targetX).strength(d => d.isCompany ? graphSettings.physics.xGravityCompany : graphSettings.physics.xGravityStage))
+      .force('y', forceY(d => d.targetY).strength(d => d.isCompany ? graphSettings.physics.yGravityCompany : graphSettings.physics.yGravityStage))
       .force('charge', forceManyBody().strength(d => (
         d.isCompany
-          ? GRAPH_SETTINGS.physics.repulsionStrengthCompany
-          : GRAPH_SETTINGS.physics.repulsionStrengthStage
+          ? graphSettings.physics.repulsionStrengthCompany
+          : graphSettings.physics.repulsionStrengthStage
       )))
       .force('stage-company-attraction', forceLink(attractionLinks)
         .id(node => node.id)
@@ -203,7 +263,7 @@ function GraphView({
           link.source.targetX - link.target.targetX,
           link.source.targetY - link.target.targetY
         ))
-        .strength(GRAPH_SETTINGS.physics.stageCompanyAttractionStrength));
+        .strength(graphSettings.physics.stageCompanyAttractionStrength));
 
     simulationRef.current = simulation;
     initialAlphaDecayRef.current = simulation.alphaDecay();
@@ -239,15 +299,15 @@ function GraphView({
         0
       );
       if (
-        simulation.alpha() <= GRAPH_SETTINGS.physics.settledAlphaThreshold
-        && maxVelocity <= GRAPH_SETTINGS.physics.settledVelocityThreshold
+        simulation.alpha() <= graphSettings.physics.settledAlphaThreshold
+        && maxVelocity <= graphSettings.physics.settledVelocityThreshold
       ) {
         settledTicksRef.current += 1;
         if (
-          settledTicksRef.current >= GRAPH_SETTINGS.physics.settledTicksBeforeFastCooling
-          && simulation.alphaDecay() < GRAPH_SETTINGS.physics.settledAlphaDecay
+          settledTicksRef.current >= graphSettings.physics.settledTicksBeforeFastCooling
+          && simulation.alphaDecay() < graphSettings.physics.settledAlphaDecay
         ) {
-          simulation.alphaDecay(GRAPH_SETTINGS.physics.settledAlphaDecay);
+          simulation.alphaDecay(graphSettings.physics.settledAlphaDecay);
         }
       } else {
         settledTicksRef.current = 0;
@@ -266,16 +326,17 @@ function GraphView({
       initialAlphaDecayRef.current = null;
       settledTicksRef.current = 0;
     };
-  }, [applicationsData]);
+  }, [applicationsData, graphSettings.layout, graphSettings.physics]);
 
   return (
     <div className="w-full h-full bg-slate-950">
       <ReactFlowProvider>
         <ReactFlow 
-          nodes={nodes} 
-          edges={edges} 
+          nodes={renderedNodes} 
+          edges={renderedEdges} 
           nodeTypes={nodeTypes}
-          edgeTypes={edgeTypes} 
+          edgeTypes={edgeTypes}
+          defaultEdgeOptions={{ type: 'multi', animated: animatedEdges }}
           onNodesChange={onNodesChange} 
           onNodeDragStart={onNodeDragStart}
           onNodeDrag={onNodeDrag}
@@ -291,7 +352,6 @@ function GraphView({
           minZoom={0.1}
           maxZoom={4}
           panOnDrag={isPanEnabled}
-          defaultEdgeOptions={{ type: 'multi', animated: true }}
           proOptions={{ hideAttribution: true }}
         >
           <Background color="#334155" gap={20} size={1} />
