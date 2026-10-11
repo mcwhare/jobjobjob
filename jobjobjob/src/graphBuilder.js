@@ -64,9 +64,7 @@ const getStageProgress = (stage) => {
   return knownStageIndex === -1 ? 4 : knownStageIndex;
 };
 
-const getFurthestStage = (stages) => stages.reduce((furthest, stage) => (
-  !furthest || getStageProgress(stage) > getStageProgress(furthest) ? stage : furthest
-), '');
+const getFurthestStage = (stages) => stages.at(-1) || '';
 
 const getOutcomeColor = (stage) => OUTCOME_COLORS[getStageCategory(stage)] || OUTCOME_COLORS.default;
 
