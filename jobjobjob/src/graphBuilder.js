@@ -346,6 +346,13 @@ export function buildRoomGraph(allData, previousSimulationNodes, savedPositions,
     if (completedStages.length === 0) return;
     const furthestStage = getFurthestStage(completedStages);
     const applicationColor = getOutcomeColor(furthestStage);
+    const pathId = `application-${index}`;
+    const pathNodeIds = [
+      `friend-${row.Friend}`,
+      ...completedStages.map(stage => `stage-${stage}`),
+      `company-${row.Company}`
+    ];
+    const pathData = { pathId, pathNodeIds, pathColor: applicationColor };
 
     edges.push({
       id: `e-${row.Friend}-${completedStages[0]}-${index}-start`,
@@ -353,7 +360,8 @@ export function buildRoomGraph(allData, previousSimulationNodes, savedPositions,
       target: `stage-${completedStages[0]}`,
       type: 'multi',
       markerEnd: { type: MarkerType.ArrowClosed, color: applicationColor },
-      style: { stroke: applicationColor, strokeWidth: 2 }
+      style: { stroke: applicationColor, strokeWidth: 2 },
+      data: pathData
     });
 
     for (let stageIndex = 0; stageIndex < completedStages.length - 1; stageIndex++) {
@@ -365,7 +373,8 @@ export function buildRoomGraph(allData, previousSimulationNodes, savedPositions,
         type: 'multi',
         markerEnd: { type: MarkerType.ArrowClosed, color: sourceStageColor },
         style: { stroke: sourceStageColor, strokeWidth: 2 },
-        animated: true
+        animated: true,
+        data: pathData
       });
     }
 
@@ -376,7 +385,8 @@ export function buildRoomGraph(allData, previousSimulationNodes, savedPositions,
       target: `company-${row.Company}`,
       type: 'multi',
       markerEnd: { type: MarkerType.ArrowClosed, color: finalStageColor },
-      style: { stroke: finalStageColor, strokeWidth: 2 }
+      style: { stroke: finalStageColor, strokeWidth: 2 },
+      data: pathData
     });
   });
 

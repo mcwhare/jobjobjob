@@ -232,15 +232,24 @@ export default function Home() {
             <div className="p-5 sm:p-6 overflow-y-auto flex-1 text-slate-300 space-y-5 custom-scrollbar text-sm">
               <div className="border-b border-slate-800 pb-4">
                 <div className="flex justify-between items-center mb-1">
-                  <h3 className="font-bold text-white">Room Overview Stats</h3>
+                  <h3 className="font-bold text-white">Path highlighting</h3>
                   <span className="text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full font-mono">Latest</span>
+                </div>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Added a feature to highlight paths in the graph. Also improved node behaviour.
+                </p>
+              </div>
+
+              <div className="border-b border-slate-800 pb-4">
+                <div className="flex justify-between items-center mb-1">
+                  <h3 className="font-bold text-white">Room Overview Stats</h3>
                 </div>
                 <p className="text-xs text-slate-400 leading-relaxed">
                   Added a stats panel with a detailed breakdown.
                 </p>
               </div>
 
-              <div className="border-b border-slate-800 pb-4">
+              <div className="border-slate-800 pb-4">
                 <div className="flex justify-between items-center mb-1">
                   <h3 className="font-bold text-white">Interactive Onboarding & Tooltips</h3>
                 </div>
@@ -249,14 +258,6 @@ export default function Home() {
                 </p>
               </div>
 
-              <div>
-                <div className="flex justify-between items-center mb-1">
-                  <h3 className="font-bold text-white">Graph Physics & Edge Routing</h3>
-                </div>
-                <p className="text-xs text-slate-400 leading-relaxed">
-                  Upgraded React Flow layout algorithms with multi-edge separation and smooth D3 force simulations for clean network mapping.
-                </p>
-              </div>
             </div>
           </div>
         </div>

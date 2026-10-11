@@ -31,7 +31,7 @@ function MultiEdge({ sourceX, sourceY, targetX, targetY, style, markerEnd, data 
 
   const path = `M ${sourceX} ${sourceY} Q ${controlPointX} ${controlPointY} ${targetX} ${targetY}`;
 
-  return <BaseEdge path={path} style={style} markerEnd={markerEnd} />;
+  return <BaseEdge path={path} style={style} markerEnd={markerEnd} interactionWidth={24} />;
 }
 
 const edgeTypes = { multi: MultiEdge };
@@ -82,18 +82,35 @@ function DynamicCircleNode({ data, isConnectable }) {
         />
       ])}
       <div
-        className="nodrag nopan"
         style={{
           display: 'flex',
           width: '100%',
           height: '100%',
           alignItems: 'center',
           justifyContent: 'center',
-          boxSizing: 'border-box'
+          boxSizing: 'border-box',
+          pointerEvents: 'none'
         }}
       >
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            borderRadius: '50%',
+            background: '#fff',
+            border: `2px solid ${data.highlightColor || '#fff'}`,
+            boxShadow: data.isPathHighlighted
+              ? `0 0 0 2px ${data.highlightColor}, 0 0 14px ${data.highlightColor}99`
+              : '0 10px 15px -3px rgb(0 0 0 / 0.5), 0 4px 6px -4px rgb(0 0 0 / 0.5)',
+            transform: data.isPathHighlighted ? 'scale(1.1)' : 'scale(1)',
+            transition: 'transform 120ms ease, box-shadow 120ms ease',
+            transformOrigin: 'center'
+          }}
+        />
         <span
           style={{
+            position: 'relative',
+            zIndex: 1,
             display: 'block',
             width: '100%',
             padding: '0 12px',
@@ -145,18 +162,42 @@ function GraphView({
 }) {
   const [nodes, setNodes] = useState([]);
   const [edges, setEdges] = useState([]);
+  const [hoveredPathId, setHoveredPathId] = useState(null);
+  const [pinnedPathId, setPinnedPathId] = useState(null);
+  const activePathId = pinnedPathId || hoveredPathId;
   const renderedNodes = useMemo(
-    () => updateNodeFontSize(nodes, graphSettings.nodes.fontSize),
-    [nodes, graphSettings.nodes.fontSize]
+    () => updateNodeFontSize(nodes, graphSettings.nodes.fontSize).map(node => {
+      const isPathHighlighted = activePathId !== null
+        && node.data?.pathIds?.includes(activePathId);
+      const pathColor = isPathHighlighted
+        ? node.data.pathColors[activePathId]
+        : null;
+      return {
+        ...node,
+        data: { ...node.data, isPathHighlighted, highlightColor: pathColor },
+        style: {
+          ...node.style,
+          opacity: activePathId && !isPathHighlighted ? 0.16 : 1,
+          transition: 'opacity 120ms ease'
+        }
+      };
+    }),
+    [nodes, graphSettings.nodes.fontSize, activePathId]
   );
   const renderedEdges = useMemo(() => updateEdgeHandles(edges, renderedNodes).map(edge => ({
     ...edge,
     animated: animatedEdges,
+    style: {
+      ...edge.style,
+      strokeWidth: edge.data?.pathId === activePathId ? 3.5 : edge.style?.strokeWidth,
+      opacity: activePathId && edge.data?.pathId !== activePathId ? 0.12 : 1,
+      transition: 'opacity 120ms ease, stroke-width 120ms ease'
+    },
     data: {
       ...edge.data,
       edgeSeparation: graphSettings.edges.multiEdgeSeparation
     }
-  }  )), [edges, renderedNodes, animatedEdges, graphSettings.edges.multiEdgeSeparation]);
+  } )), [edges, renderedNodes, animatedEdges, graphSettings.edges.multiEdgeSeparation, activePathId]);
   const [contextMenu, setContextMenu] = useState(null);
   const graphSettingsRef = useRef(graphSettings);
   const simulationRef = useRef(null);
@@ -168,6 +209,17 @@ function GraphView({
     const displayedEdgeColors = new Set(edges.map((edge) => edge.style?.stroke?.toLowerCase()));
     return EDGE_LEGEND_ITEMS.filter(({ color }) => displayedEdgeColors.has(color));
   }, [edges]);
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setPinnedPathId(null);
+        setHoveredPathId(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const onNodesChange = useCallback(
     (changes) => setNodes((currentNodes) => applyNodeChanges(changes, currentNodes)),
@@ -245,6 +297,19 @@ function GraphView({
       nodePositionsRef.current,
       graphSettingsRef.current
     );
+    const pathMembership = new Map();
+    graphEdges.forEach((edge) => {
+      edge.data.pathNodeIds.forEach((nodeId) => {
+        const membership = pathMembership.get(nodeId) || { pathIds: [], pathColors: {} };
+        membership.pathIds.push(edge.data.pathId);
+        membership.pathColors[edge.data.pathId] = edge.data.pathColor;
+        pathMembership.set(nodeId, membership);
+      });
+    });
+    [...friendNodes, ...simulationNodes].forEach((node) => {
+      const membership = pathMembership.get(node.id);
+      if (membership) node.data = { ...node.data, ...membership };
+    });
     d3NodesRef.current = simulationNodes;
     setEdges(graphEdges);
 
@@ -341,13 +406,25 @@ function GraphView({
           onNodeDragStart={onNodeDragStart}
           onNodeDrag={onNodeDrag}
           onNodeDragStop={onNodeDragStop}
+          onEdgeMouseEnter={(_, edge) => setHoveredPathId(edge.data?.pathId || null)}
+          onEdgeMouseLeave={() => setHoveredPathId(null)}
+          onEdgeClick={(_, edge) => {
+            const pathId = edge.data?.pathId;
+            if (!pathId) return;
+            setPinnedPathId(currentPathId => currentPathId === pathId ? null : pathId);
+            setHoveredPathId(null);
+          }}
           onNodeContextMenu={(event, node) => {
             event.preventDefault();
             if (node.id.startsWith('friend-')) {
               setContextMenu({ x: event.clientX, y: event.clientY, node });
             }
           }}
-          onPaneClick={() => setContextMenu(null)}
+          onPaneClick={() => {
+            setContextMenu(null);
+            setPinnedPathId(null);
+            setHoveredPathId(null);
+          }}
           fitView
           minZoom={0.1}
           maxZoom={4}
