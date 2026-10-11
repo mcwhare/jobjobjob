@@ -84,6 +84,9 @@ function RoomContent({ roomId }) {
   const [isOverviewCollapsed, setIsOverviewCollapsed] = useState(true);
   const [graphSettings, setGraphSettings] = useState(() => JSON.parse(JSON.stringify(GRAPH_SETTINGS)));
   const [animatedEdges, setAnimatedEdges] = useState(true);
+  const [exportRequestId, setExportRequestId] = useState(0);
+  const [isExportingGraph, setIsExportingGraph] = useState(false);
+  const [graphExportMessage, setGraphExportMessage] = useState('');
 
   const [hasCopied, setHasCopied] = useState(false);
 
@@ -107,6 +110,25 @@ function RoomContent({ roomId }) {
   const resetGraphSettings = useCallback(() => {
     setGraphSettings(JSON.parse(JSON.stringify(GRAPH_SETTINGS)));
     setAnimatedEdges(true);
+  }, []);
+
+  const handleGraphExported = useCallback((imageDataUrl) => {
+    const downloadLink = document.createElement('a');
+    const safeRoomId = roomId.replace(/[^a-z0-9_-]/gi, '-');
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    downloadLink.href = imageDataUrl;
+    downloadLink.download = `jobjobjob-graph-${safeRoomId}-${timestamp}.png`;
+    downloadLink.click();
+    setIsExportingGraph(false);
+    setExportRequestId(0);
+    setGraphExportMessage('Graph image downloaded.');
+  }, [roomId]);
+
+  const handleGraphExportError = useCallback((error) => {
+    console.error('Could not export the graph image.', error);
+    setIsExportingGraph(false);
+    setExportRequestId(0);
+    setGraphExportMessage('Could not export the graph image. Please try again.');
   }, []);
 
   const [dismissedTutorialTargets, setDismissedTutorialTargets] = useState(() => {
@@ -349,6 +371,34 @@ function RoomContent({ roomId }) {
 
         <div className="flex items-center gap-3">
           <button
+            type="button"
+            onClick={() => {
+              setGraphExportMessage('');
+              setIsExportingGraph(true);
+              setExportRequestId(requestId => requestId + 1);
+            }}
+            disabled={isExportingGraph || applicationsData.length === 0}
+            className="flex items-center gap-2 rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm font-semibold text-slate-200 transition-colors hover:bg-slate-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+            title={applicationsData.length === 0 ? 'Add graph data before exporting' : 'Download the full graph as a PNG'}
+          >
+            {isExportingGraph ? (
+              <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+            ) : (
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 16V4m0 0L7 9m5-5 5 5M5 14v5h14v-5" />
+              </svg>
+            )}
+            {isExportingGraph ? 'Exporting...' : 'Export PNG'}
+          </button>
+          {graphExportMessage && (
+            <span role="status" className="text-xs text-slate-300">
+              {graphExportMessage}
+            </span>
+          )}
+          <button
             onClick={() => setIsModalOpen(true)}
             data-tutorial-target="help"
             className="w-9 h-9 flex items-center justify-center rounded-full bg-slate-800 border border-slate-700 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors shrink-0 cursor-pointer"
@@ -396,6 +446,9 @@ function RoomContent({ roomId }) {
           onPanEnabledChange={setIsPanEnabled}
           graphSettings={graphSettings}
           animatedEdges={animatedEdges}
+          exportRequestId={exportRequestId}
+          onExported={handleGraphExported}
+          onExportError={handleGraphExportError}
         />
         <GraphSettingsDrawer
           settings={graphSettings}

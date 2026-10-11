@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactFlow, { applyNodeChanges, Background, Controls, Handle, Position, useReactFlow, ReactFlowProvider, BaseEdge } from 'reactflow';
 import 'reactflow/dist/style.css';
+import { toPng } from 'html-to-image';
 
 import { forceSimulation, forceY, forceX, forceManyBody, forceCollide, forceLink } from 'd3-force';
 import { GRAPH_SETTINGS } from '../graphSettings';
@@ -152,6 +153,124 @@ function AutoFitView({ nodes }) {
   return null; 
 }
 
+function getExportCanvasSize(nodes) {
+  if (nodes.length === 0) return { width: 1600, height: 1000 };
+
+  const bounds = nodes.reduce((result, node) => {
+    const width = node.style?.width || 75;
+    const height = node.style?.height || 75;
+    return {
+      minX: Math.min(result.minX, node.position.x),
+      minY: Math.min(result.minY, node.position.y),
+      maxX: Math.max(result.maxX, node.position.x + width),
+      maxY: Math.max(result.maxY, node.position.y + height)
+    };
+  }, {
+    minX: Infinity,
+    minY: Infinity,
+    maxX: -Infinity,
+    maxY: -Infinity
+  });
+
+  const graphWidth = Math.max(1, bounds.maxX - bounds.minX);
+  const graphHeight = Math.max(1, bounds.maxY - bounds.minY);
+  const scale = Math.min(1, 2800 / Math.max(graphWidth, graphHeight));
+  return {
+    width: Math.ceil(graphWidth * scale + 320),
+    height: Math.ceil(graphHeight * scale + 320)
+  };
+}
+
+function ExportCapture({ requestId, canvasRef, onExported, onError }) {
+  const { fitView } = useReactFlow();
+
+  useEffect(() => {
+    if (!requestId) return undefined;
+    let cancelled = false;
+    const nextFrame = () => new Promise(resolve => requestAnimationFrame(resolve));
+
+    const captureGraph = async () => {
+      try {
+        await nextFrame();
+        fitView({ padding: 0.12, duration: 0 });
+        await nextFrame();
+        await nextFrame();
+        if (document.fonts?.ready) await document.fonts.ready;
+
+        const graphElement = canvasRef.current?.querySelector('.react-flow');
+        if (!graphElement) throw new Error('The graph export canvas was not rendered.');
+        const imageDataUrl = await toPng(graphElement, {
+          backgroundColor: '#020617',
+          pixelRatio: 1.5,
+          cacheBust: true,
+          filter: (element) => !(
+            element instanceof HTMLElement
+            && element.classList.contains('react-flow__handle')
+          )
+        });
+        if (!cancelled) onExported(imageDataUrl);
+      } catch (error) {
+        if (!cancelled) onError(error);
+      }
+    };
+
+    captureGraph();
+    return () => {
+      cancelled = true;
+    };
+  }, [requestId, canvasRef, fitView, onExported, onError]);
+
+  return null;
+}
+
+function GraphImageExporter({ nodes, edges, requestId, onExported, onError }) {
+  const canvasRef = useRef(null);
+  if (!requestId) return null;
+
+  const canvasSize = getExportCanvasSize(nodes);
+  return (
+    <div
+      ref={canvasRef}
+      aria-hidden="true"
+      style={{
+        position: 'fixed',
+        left: '-10000px',
+        top: 0,
+        width: canvasSize.width,
+        height: canvasSize.height,
+        overflow: 'hidden',
+        pointerEvents: 'none',
+        background: '#020617'
+      }}
+    >
+      <ReactFlowProvider>
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
+          fitView
+          nodesDraggable={false}
+          nodesConnectable={false}
+          elementsSelectable={false}
+          panOnDrag={false}
+          zoomOnScroll={false}
+          zoomOnPinch={false}
+          zoomOnDoubleClick={false}
+          proOptions={{ hideAttribution: true }}
+        >
+          <ExportCapture
+            requestId={requestId}
+            canvasRef={canvasRef}
+            onExported={onExported}
+            onError={onError}
+          />
+        </ReactFlow>
+      </ReactFlowProvider>
+    </div>
+  );
+}
+
 function GraphView({
   applicationsData,
   onDeleteFriend,
@@ -159,6 +278,9 @@ function GraphView({
   onPanEnabledChange,
   graphSettings,
   animatedEdges,
+  exportRequestId,
+  onExported,
+  onExportError,
 }) {
   const [nodes, setNodes] = useState([]);
   const [edges, setEdges] = useState([]);
@@ -198,6 +320,23 @@ function GraphView({
       edgeSeparation: graphSettings.edges.multiEdgeSeparation
     }
   } )), [edges, renderedNodes, animatedEdges, graphSettings.edges.multiEdgeSeparation, activePathId]);
+  const exportNodes = useMemo(
+    () => updateNodeFontSize(nodes, graphSettings.nodes.fontSize).map(node => ({
+      ...node,
+      data: { ...node.data, isPathHighlighted: false, highlightColor: null },
+      style: { ...node.style, opacity: 1 }
+    })),
+    [nodes, graphSettings.nodes.fontSize]
+  );
+  const exportEdges = useMemo(
+    () => updateEdgeHandles(edges, exportNodes).map(edge => ({
+      ...edge,
+      animated: false,
+      style: { ...edge.style, opacity: 1, strokeWidth: 2 },
+      data: { ...edge.data, edgeSeparation: graphSettings.edges.multiEdgeSeparation }
+    })),
+    [edges, exportNodes, graphSettings.edges.multiEdgeSeparation]
+  );
   const [contextMenu, setContextMenu] = useState(null);
   const graphSettingsRef = useRef(graphSettings);
   const simulationRef = useRef(null);
@@ -489,6 +628,13 @@ function GraphView({
             </button>
           </div>
         )}
+        <GraphImageExporter
+          nodes={exportNodes}
+          edges={exportEdges}
+          requestId={exportRequestId}
+          onExported={onExported}
+          onError={onExportError}
+        />
       </ReactFlowProvider>
     </div>
   );
