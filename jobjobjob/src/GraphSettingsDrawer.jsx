@@ -104,6 +104,7 @@ export default function GraphSettingsDrawer({
             <button
               type="button"
               onClick={onReset}
+              aria-label="Reset graph settings"
               className="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800 hover:text-white"
             >
               Reset

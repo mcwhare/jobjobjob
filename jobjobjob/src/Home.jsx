@@ -18,12 +18,23 @@ export default function Home() {
   const bgRef = useRef(null);
 
   useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setIsPrivacyModalOpen(false);
+        setIsUpdatesModalOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  useEffect(() => {
     const handleMouseMove = (e) => {
       if (!bgRef.current) return;
-      
-      const moveX = (0.5 - e.clientX / window.innerWidth) * 10; 
+
+      const moveX = (0.5 - e.clientX / window.innerWidth) * 10;
       const moveY = (0.5 - e.clientY / window.innerHeight) * 10;
-      
+
       requestAnimationFrame(() => {
         if (bgRef.current) {
           bgRef.current.style.transform = `translate(${moveX}px, ${moveY}px) scale(1.05)`;
@@ -106,15 +117,15 @@ export default function Home() {
 
   return (
     <div className="flex flex-col items-center justify-center min-h-[100dvh] bg-[#060a14] font-sans p-4 sm:p-6 relative overflow-hidden">
-      
+
       {/* Interactive Parallax Background Layer */}
-      <div 
+      <div
         ref={bgRef}
         className="absolute inset-0 z-0 bg-cover bg-center will-change-transform ease-out duration-75"
-        style={{ 
+        style={{
           backgroundImage: `url("${bgImage}")`,
           transform: 'scale(1.05)'
-        }} 
+        }}
       />
 
       {/* Main Card Container */}
@@ -137,14 +148,18 @@ export default function Home() {
 
         {/* Top Buttons Row */}
         <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mb-8 mt-4 md:mb-12 w-full sm:w-auto">
-          <button 
+          <button
+            type="button"
             onClick={handleSeeExample}
+            aria-label="See example room"
             className="px-6 sm:px-8 py-3 text-sm font-bold rounded-lg bg-[#cbd5e1] text-slate-900 hover:bg-white transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0 hover:shadow-lg shadow-md w-full sm:w-auto text-center cursor-pointer"
           >
             See Example
           </button>
-          <button 
+          <button
+            type="button"
             onClick={handleCreateRoom}
+            aria-label="Create new room"
             disabled={isCreating}
             className={`px-6 sm:px-8 py-3 text-sm font-bold rounded-lg text-white transition-all duration-200 w-full sm:w-auto text-center ${isCreating ? 'bg-blue-800 cursor-not-allowed shadow-none' : 'bg-[#0070f3] hover:bg-blue-500 hover:-translate-y-0.5 active:translate-y-0 shadow-lg shadow-blue-500/20 hover:shadow-blue-500/40 cursor-pointer'}`}
           >
@@ -190,14 +205,18 @@ export default function Home() {
         <span>@mcwh 2026</span>
         <div className="flex items-center gap-3">
           <button
+            type="button"
             onClick={() => setIsUpdatesModalOpen(true)}
+            aria-label="Open updates dialog"
             className="hover:text-white transition-colors underline decoration-slate-600 underline-offset-4 cursor-pointer"
           >
             What's New
           </button>
           <span>•</span>
           <button
+            type="button"
             onClick={() => setIsPrivacyModalOpen(true)}
+            aria-label="Open privacy policy dialog"
             className="hover:text-white transition-colors cursor-pointer"
           >
             Privacy Policy
@@ -207,11 +226,11 @@ export default function Home() {
 
       {/* Feature Updates Modal */}
       {isUpdatesModalOpen && (
-        <div 
+        <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm transition-opacity"
           onClick={() => setIsUpdatesModalOpen(false)}
         >
-          <div 
+          <div
             className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col relative overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
@@ -220,10 +239,12 @@ export default function Home() {
                 Updates
               </h2>
               <button
+                type="button"
                 onClick={() => setIsUpdatesModalOpen(false)}
+                aria-label="Close updates dialog"
                 className="text-slate-400 hover:text-white p-1 rounded-md hover:bg-slate-800 transition-colors cursor-pointer"
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
@@ -265,21 +286,23 @@ export default function Home() {
 
       {/* Privacy Policy Modal */}
       {isPrivacyModalOpen && (
-        <div 
+        <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm transition-opacity"
           onClick={() => setIsPrivacyModalOpen(false)}
         >
-          <div 
+          <div
             className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col relative overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex justify-between items-center p-4 sm:p-5 border-b border-slate-800 bg-slate-900/50">
               <h2 className="text-lg sm:text-xl font-bold text-white">Privacy Policy</h2>
               <button
+                type="button"
                 onClick={() => setIsPrivacyModalOpen(false)}
+                aria-label="Close privacy policy dialog"
                 className="text-slate-400 hover:text-white p-1 rounded-md hover:bg-slate-800 transition-colors"
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>

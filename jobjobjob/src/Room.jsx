@@ -70,6 +70,17 @@ function RoomContent({ roomId }) {
     setTooltipPos({ x: e.clientX, y: e.clientY });
   };
 
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setIsBreakdownOpen(false);
+        setIsModalOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   const [uploaderName, setUploaderName] = useState(() => {
     try {
       return window.localStorage.getItem(`jobjobjob:uploader-name:${roomId}`) || '';
@@ -343,23 +354,25 @@ function RoomContent({ roomId }) {
             title="Home"
             className="flex items-center justify-center rounded-md p-1 hover:bg-slate-800 transition-colors cursor-pointer"
           >
-            <img src={logoImage} alt="" className="w-12 h-12 object-contain" />
+            <img src={logoImage} alt="" aria-hidden="true" className="w-12 h-12 object-contain" />
           </button>
           <div className="flex items-center gap-2">
             <span className="text-slate-400 text-sm">Room code:</span>
             <button
+              type="button"
               onClick={handleCopyRoomId}
+              aria-label="Copy room code"
               data-tutorial-target="room-code"
               className="group flex items-center gap-2 px-2 py-1 -ml-2 rounded-md hover:bg-slate-800 transition-colors cursor-pointer"
               title="Copy room code"
             >
               <strong className="tracking-widest text-white group-hover:text-blue-400 transition-colors">{roomId}</strong>
               {hasCopied ? (
-                <svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
               ) : (
-                <svg className="w-4 h-4 text-slate-500 group-hover:text-blue-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 text-slate-500 group-hover:text-blue-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                 </svg>
               )}
@@ -399,12 +412,14 @@ function RoomContent({ roomId }) {
             </span>
           )}
           <button
+            type="button"
             onClick={() => setIsModalOpen(true)}
+            aria-label="Open CSV formatting help"
             data-tutorial-target="help"
             className="w-9 h-9 flex items-center justify-center rounded-full bg-slate-800 border border-slate-700 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors shrink-0 cursor-pointer"
             title="How to use this app"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </button>
@@ -427,7 +442,7 @@ function RoomContent({ roomId }) {
                 data-tutorial-target="upload"
                 className="cursor-pointer px-4 py-2 text-sm font-bold rounded-md bg-emerald-600 text-white hover:bg-emerald-500 transition-colors shadow-md flex items-center gap-2"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                 </svg>
                 Upload CSV
@@ -464,11 +479,13 @@ function RoomContent({ roomId }) {
 
             {isOverviewCollapsed ? (
               <button
+                type="button"
                 onClick={() => setIsOverviewCollapsed(false)}
+                aria-label="Expand room overview"
                 className="w-full py-1.5 px-2 text-sm font-bold text-slate-200 hover:text-white transition-colors flex items-center justify-between cursor-pointer"
               >
                 <span>Stats</span>
-                <svg className="w-4 h-4 transition-transform duration-300 rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 transition-transform duration-300 rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 15l7-7 7 7" />
                 </svg>
               </button>
@@ -477,11 +494,13 @@ function RoomContent({ roomId }) {
                 <div className="flex justify-between items-center mb-3">
                   <h3 className="text-base font-bold text-white tracking-wide">Room overview</h3>
                   <button
+                    type="button"
                     onClick={() => setIsOverviewCollapsed(true)}
+                    aria-label="Collapse room overview"
                     className="px-2.5 py-1 text-xs font-semibold rounded-md bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors flex items-center gap-1.5 cursor-pointer border border-slate-700"
                   >
                     Collapse
-                    <svg className="w-3.5 h-3.5 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-3.5 h-3.5 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 15l7-7 7 7" />
                     </svg>
                   </button>
@@ -508,11 +527,13 @@ function RoomContent({ roomId }) {
                   </div>
 
                   <button
+                    type="button"
                     onClick={() => setIsBreakdownOpen(true)}
+                    aria-label="View detailed room breakdown"
                     className="w-full mt-1 py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-bold shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer"
                   >
                     View breakdown
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M14 5l7 7m0 0l-7 7m7-7H3" />
                     </svg>
                   </button>
@@ -540,10 +561,12 @@ function RoomContent({ roomId }) {
                 <p className="text-xs text-slate-400 mt-0.5">Summary of each friend's stats.</p>
               </div>
               <button
+                type="button"
                 onClick={() => setIsBreakdownOpen(false)}
+                aria-label="Close detailed room breakdown dialog"
                 className="text-slate-400 hover:text-white p-1.5 rounded-md hover:bg-slate-800 transition-colors cursor-pointer"
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
@@ -617,12 +640,12 @@ function RoomContent({ roomId }) {
 
                   return (
                     <div className="space-y-6">
-                      
+
                       {/* Global Room Summary 3x2 Grid */}
                       <div className="bg-slate-800/40 border border-slate-700/60 rounded-xl p-4 shadow-inner">
                         <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Room Overview Analytics</h3>
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pt-4">
-                          
+
                           {/* Card 1 */}
                           <div className="bg-slate-900/80 border border-slate-800 rounded-lg p-3 flex flex-col justify-between transition-all duration-200 hover:border-emerald-500/50 hover:bg-slate-800 hover:scale-[1.02] cursor-pointer shadow-md relative group">
                             <div className="absolute -top-10 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-30 bg-slate-800 border border-slate-600 text-slate-200 text-xs px-3 py-1.5 rounded-lg shadow-xl whitespace-nowrap">
@@ -694,7 +717,7 @@ function RoomContent({ roomId }) {
                             const cat = getStageCategory(getFurthestStage(app.Stages));
                             return cat === 'offered' || cat === 'accepted';
                           }).length;
-                          
+
                           const acceptedApps = apps.filter(app => getStageCategory(getFurthestStage(app.Stages)) === 'accepted');
                           const acceptedCompanies = acceptedApps.length > 0 ? acceptedApps.map(a => a.Company).join(', ') : 'None';
 
@@ -725,7 +748,7 @@ function RoomContent({ roomId }) {
                               </div>
 
                               <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 pt-4">
-                                
+
                                 <div className="bg-slate-900/70 border border-slate-800 rounded-lg p-3 transition-all duration-200 hover:border-slate-500 hover:bg-slate-800 hover:scale-[1.02] cursor-pointer relative group">
                                   <div className="absolute -top-10 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-30 bg-slate-800 border border-slate-600 text-slate-200 text-xs px-3 py-1.5 rounded-lg shadow-xl whitespace-nowrap">
                                     Total job applications submitted.
@@ -809,10 +832,12 @@ function RoomContent({ roomId }) {
             <div className="flex justify-between items-center p-5 border-b border-slate-800 bg-slate-900/50">
               <h2 className="text-xl font-bold text-white">How to format your CSV</h2>
               <button
+                type="button"
                 onClick={() => setIsModalOpen(false)}
+                aria-label="Close CSV formatting help dialog"
                 className="text-slate-400 hover:text-white p-1 rounded-md hover:bg-slate-800 transition-colors cursor-pointer"
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
