@@ -63,23 +63,6 @@ function RoomContent({ roomId }) {
   const isExampleRoom = roomId === 'example';
   const [applicationsData, setApplicationsData] = useState([]);
 
-  const [activeTooltip, setActiveTooltip] = useState(null);
-  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
-
-  const handleMouseMove = (e) => {
-    setTooltipPos({ x: e.clientX, y: e.clientY });
-  };
-
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape') {
-        setIsBreakdownOpen(false);
-        setIsModalOpen(false);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
 
   const [uploaderName, setUploaderName] = useState(() => {
     try {
@@ -100,6 +83,17 @@ function RoomContent({ roomId }) {
   const [graphExportMessage, setGraphExportMessage] = useState('');
 
   const [hasCopied, setHasCopied] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setIsBreakdownOpen(false);
+        setIsModalOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const handleCopyRoomId = () => {
     navigator.clipboard.writeText(roomId);
@@ -267,10 +261,6 @@ function RoomContent({ roomId }) {
   const totalApplications = applicationsData.length;
   const totalRejections = applicationsData.filter(app => getStageCategory(getFurthestStage(app.Stages)) === 'rejected').length;
   const totalCompanies = new Set(applicationsData.map(app => app.Company).filter(Boolean)).size;
-  const totalInterviews = applicationsData.filter(app => {
-    const stages = (app.Stages || '').split(',').map(s => s.trim());
-    return stages.some(s => getStageCategory(s) === 'interview' || getStageProgress(s) >= 3);
-  }).length;
   const totalOffers = applicationsData.filter(app => {
     const cat = getStageCategory(getFurthestStage(app.Stages));
     return cat === 'offered' || cat === 'accepted';
@@ -283,41 +273,6 @@ function RoomContent({ roomId }) {
     return acc;
   }, {});
 
-  // 1. Top Contributor
-  const friendCounts = applicationsData.reduce((acc, app) => {
-    acc[app.Friend] = (acc[app.Friend] || 0) + 1;
-    return acc;
-  }, {});
-  const topContributor = Object.entries(friendCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || 'None';
-
-  // 2. Most Applied Company
-  const companyCounts = applicationsData.reduce((acc, app) => {
-    if (app.Company) acc[app.Company] = (acc[app.Company] || 0) + 1;
-    return acc;
-  }, {});
-  const topCompanyEntry = Object.entries(companyCounts).sort((a, b) => b[1] - a[1])[0];
-  const mostAppliedCompany = topCompanyEntry ? `${topCompanyEntry[0]} (${topCompanyEntry[1]})` : 'None';
-
-  // 3. Group Offer Rate
-  const totalAppsCount = applicationsData.length;
-  const totalOffersCount = applicationsData.filter(app => {
-    const cat = getStageCategory(getFurthestStage(app.Stages));
-    return cat === 'offered' || cat === 'accepted';
-  }).length;
-  const groupOfferRate = totalAppsCount > 0 ? Math.round((totalOffersCount / totalAppsCount) * 100) : 0;
-
-  // Most rejected/ghosted friend
-  const friendGhostRejectionCounts = applicationsData.reduce((acc, app) => {
-    if (app.Friend) {
-      const cat = getStageCategory(getFurthestStage(app.Stages));
-      if (cat === 'rejected' || cat === 'ghosted') {
-        acc[app.Friend] = (acc[app.Friend] || 0) + 1;
-      }
-    }
-    return acc;
-  }, {});
-  const topGhostRejectedEntry = Object.entries(friendGhostRejectionCounts).sort((a, b) => b[1] - a[1])[0];
-  const mostRejectedFriend = topGhostRejectedEntry ? `${topGhostRejectedEntry[0]} (${topGhostRejectedEntry[1]})` : 'None';
 
   // Highest offer rate friend (minimum 1 application to qualify)
   const friendOfferStats = {};
@@ -330,16 +285,6 @@ function RoomContent({ roomId }) {
     const cat = getStageCategory(getFurthestStage(app.Stages));
     if (cat === 'offered' || cat === 'accepted') {
       friendOfferStats[app.Friend].offers += 1;
-    }
-  });
-
-  let highestOfferRateFriend = 'None';
-  let maxRate = -1;
-  Object.entries(friendOfferStats).forEach(([friend, stats]) => {
-    const rate = stats.total > 0 ? (stats.offers / stats.total) * 100 : 0;
-    if (rate > maxRate) {
-      maxRate = rate;
-      highestOfferRateFriend = `${friend} (${Math.round(rate)}%)`;
     }
   });
 
@@ -465,6 +410,39 @@ function RoomContent({ roomId }) {
           onExported={handleGraphExported}
           onExportError={handleGraphExportError}
         />
+
+        {/* Screen reader */}
+        <div className="sr-only">
+          <h2>Network Graph Data</h2>
+          <table aria-label="Internship application network graph details">
+            <caption>A tabular representation of the collaborative job application network graph.</caption>
+            <thead>
+              <tr>
+                <th scope="col">Applicant</th>
+                <th scope="col">Company</th>
+                <th scope="col">Current Stage</th>
+                <th scope="col">Status Category</th>
+              </tr>
+            </thead>
+            <tbody>
+              {applicationsData.map((app, index) => {
+                const stages = (app.Stages || '').split(',').map(s => s.trim());
+                const currentStage = stages.length > 0 ? stages[stages.length - 1] : 'Applied';
+                const status = getStageCategory(currentStage);
+
+                return (
+                  <tr key={`${app.Friend}-${app.Company}-${index}`}>
+                    <td>{app.Friend}</td>
+                    <td>{app.Company}</td>
+                    <td>{currentStage}</td>
+                    <td>{status}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
         <GraphSettingsDrawer
           settings={graphSettings}
           onSettingChange={handleGraphSettingChange}

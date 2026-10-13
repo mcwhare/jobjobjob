@@ -287,8 +287,16 @@ function GraphView({
   const [hoveredPathId, setHoveredPathId] = useState(null);
   const [pinnedPathId, setPinnedPathId] = useState(null);
   const activePathId = pinnedPathId || hoveredPathId;
+  const graphNodes = useMemo(
+    () => applicationsData.length === 0 ? [] : nodes,
+    [applicationsData.length, nodes]
+  );
+  const graphEdges = useMemo(
+    () => applicationsData.length === 0 ? [] : edges,
+    [applicationsData.length, edges]
+  );
   const renderedNodes = useMemo(
-    () => updateNodeFontSize(nodes, graphSettings.nodes.fontSize).map(node => {
+    () => updateNodeFontSize(graphNodes, graphSettings.nodes.fontSize).map(node => {
       const isPathHighlighted = activePathId !== null
         && node.data?.pathIds?.includes(activePathId);
       const pathColor = isPathHighlighted
@@ -304,9 +312,9 @@ function GraphView({
         }
       };
     }),
-    [nodes, graphSettings.nodes.fontSize, activePathId]
+    [graphNodes, graphSettings.nodes.fontSize, activePathId]
   );
-  const renderedEdges = useMemo(() => updateEdgeHandles(edges, renderedNodes).map(edge => ({
+  const renderedEdges = useMemo(() => updateEdgeHandles(graphEdges, renderedNodes).map(edge => ({
     ...edge,
     animated: animatedEdges,
     style: {
@@ -319,23 +327,23 @@ function GraphView({
       ...edge.data,
       edgeSeparation: graphSettings.edges.multiEdgeSeparation
     }
-  } )), [edges, renderedNodes, animatedEdges, graphSettings.edges.multiEdgeSeparation, activePathId]);
+  } )), [graphEdges, renderedNodes, animatedEdges, graphSettings.edges.multiEdgeSeparation, activePathId]);
   const exportNodes = useMemo(
-    () => updateNodeFontSize(nodes, graphSettings.nodes.fontSize).map(node => ({
+    () => updateNodeFontSize(graphNodes, graphSettings.nodes.fontSize).map(node => ({
       ...node,
       data: { ...node.data, isPathHighlighted: false, highlightColor: null },
       style: { ...node.style, opacity: 1 }
     })),
-    [nodes, graphSettings.nodes.fontSize]
+    [graphNodes, graphSettings.nodes.fontSize]
   );
   const exportEdges = useMemo(
-    () => updateEdgeHandles(edges, exportNodes).map(edge => ({
+    () => updateEdgeHandles(graphEdges, exportNodes).map(edge => ({
       ...edge,
       animated: false,
       style: { ...edge.style, opacity: 1, strokeWidth: 2 },
       data: { ...edge.data, edgeSeparation: graphSettings.edges.multiEdgeSeparation }
     })),
-    [edges, exportNodes, graphSettings.edges.multiEdgeSeparation]
+    [graphEdges, exportNodes, graphSettings.edges.multiEdgeSeparation]
   );
   const [contextMenu, setContextMenu] = useState(null);
   const graphSettingsRef = useRef(graphSettings);
@@ -345,9 +353,9 @@ function GraphView({
   const initialAlphaDecayRef = useRef(null);
   const settledTicksRef = useRef(0);
   const visibleLegendItems = useMemo(() => {
-    const displayedEdgeColors = new Set(edges.map((edge) => edge.style?.stroke?.toLowerCase()));
+    const displayedEdgeColors = new Set(graphEdges.map((edge) => edge.style?.stroke?.toLowerCase()));
     return EDGE_LEGEND_ITEMS.filter(({ color }) => displayedEdgeColors.has(color));
-  }, [edges]);
+  }, [graphEdges]);
 
   useEffect(() => {
     const handleKeyDown = (event) => {
@@ -425,8 +433,6 @@ function GraphView({
   useEffect(() => {
     if (applicationsData.length === 0) {
       d3NodesRef.current = [];
-      setNodes([]);
-      setEdges([]);
       return undefined;
     }
 
@@ -592,7 +598,7 @@ function GraphView({
               </svg>
             </button>
           </Controls>
-          <AutoFitView nodes={nodes} />
+          <AutoFitView nodes={renderedNodes} />
         </ReactFlow>
         {visibleLegendItems.length > 0 && (
           <div
