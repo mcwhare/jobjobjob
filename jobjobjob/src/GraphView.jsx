@@ -7,6 +7,7 @@ import { forceSimulation, forceY, forceX, forceManyBody, forceCollide, forceLink
 import { GRAPH_SETTINGS } from '../graphSettings';
 import { EDGE_HANDLE_POSITIONS } from './edgeHandlePositions';
 import { buildRoomGraph, getNodeSize, updateEdgeHandles, updateNodeFontSize } from './graphBuilder';
+import logoImage from './assets/jjj logo trans.svg';
 
 // Custom edge that bows outwards when multiple edges share the same start and end points
 function MultiEdge({ sourceX, sourceY, targetX, targetY, style, markerEnd, data }) {
@@ -259,6 +260,25 @@ function GraphImageExporter({ nodes, edges, requestId, onExported, onError }) {
           zoomOnDoubleClick={false}
           proOptions={{ hideAttribution: true }}
         >
+          <div
+            aria-hidden="true"
+            style={{
+              position: 'absolute',
+              right: 24,
+              bottom: 24,
+              zIndex: 10,
+              width: 96,
+              height: 96,
+              opacity: 0.7,
+              pointerEvents: 'none'
+            }}
+          >
+            <img
+              src={logoImage}
+              alt=""
+              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+            />
+          </div>
           <ExportCapture
             requestId={requestId}
             canvasRef={canvasRef}
